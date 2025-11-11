@@ -68,4 +68,9 @@ checkpoints/*.pt
 data/llm_cache.pkl
 data/llm_results/
 
+# Methodology and pipeline documentation (private)
+PHASE4_METHODOLOGY.md
+PIPELINE_SIMPLE.md
+PIPELINE_SIMPLE_EN.md
+
 
