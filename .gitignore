@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# PyTorch
+*.pth
+*.pt
+
+# Data
+data/processed/*.pkl
+data/raw/
+
+# Logs
+logs/*.png
+logs/*.txt
+
+# Checkpoints
+checkpoints/*.pt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# MacOS
+.DS_Store
+
+# Others
+*.log
+.cache/
+
+# Environment variables (contains API keys)
+.env
+.env.local
+.env.*.local
+
+# LLM cache
+data/llm_cache.pkl
+data/llm_results/
+
+

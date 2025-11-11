@@ -1,0 +1,27 @@
+# PyTorch和PyTorch Geometric
+torch>=1.10.0
+torch-geometric>=2.0.3
+
+# data processing
+numpy>=1.21.0
+pandas>=1.3.0
+scikit-learn>=0.24.2
+
+# XGBoost for Adaptive Classifier
+xgboost>=1.7.0
+
+# visulaization
+matplotlib>=3.4.3
+seaborn>=0.11.2
+
+# process bar
+tqdm>=4.62.0
+
+# other tools
+joblib>=1.0.1
+
+# LLM Integration
+openai>=1.0.0
+python-dotenv>=1.0.0
+
+
