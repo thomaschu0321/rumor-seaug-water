@@ -143,24 +143,29 @@ class TAPEPipeline:
         print("="*70)
         
         # Choose processor
+        use_bert = getattr(self.config, 'USE_BERT_FEATURES', False)
+        
         if dataset_name == 'Weibo':
             processor = WeiboDataProcessor(
                 dataname=dataset_name,
                 feature_dim=self.config.FEATURE_DIM,
-                sample_ratio=sample_ratio
+                sample_ratio=sample_ratio,
+                use_bert=use_bert
             )
         else:
             processor = TwitterDataProcessor(
                 dataname=dataset_name,
                 feature_dim=self.config.FEATURE_DIM,
-                sample_ratio=sample_ratio
+                sample_ratio=sample_ratio,
+                use_bert=use_bert
             )
         
         # Load processed data
+        feature_type = "bert" if use_bert else "tfidf"
         if sample_ratio == 1.0:
-            processed_filename = f'{dataset_name}_processed_full.pkl'
+            processed_filename = f'{dataset_name}_processed_{feature_type}_full.pkl'
         else:
-            processed_filename = f'{dataset_name}_processed_sample{sample_ratio}.pkl'
+            processed_filename = f'{dataset_name}_processed_{feature_type}_sample{sample_ratio}.pkl'
         
         processed_path = os.path.join(self.config.PROCESSED_DIR, processed_filename)
         
@@ -645,7 +650,7 @@ def main():
     parser.add_argument('--dataset', type=str, default='Twitter15',
                        choices=['Twitter15', 'Twitter16', 'Weibo'],
                        help='Dataset name')
-    parser.add_argument('--sample_ratio', type=float, default=0.05,
+    parser.add_argument('--sample_ratio', type=float, default=1.0,
                        help='Data sampling ratio')
     
     # TAPE parameters

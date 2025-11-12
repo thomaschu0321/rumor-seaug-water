@@ -45,7 +45,8 @@ class Config:
     SAMPLE_RATIO = 1.0  # Use 100% of data
     
     # Feature configuration
-    FEATURE_DIM = 1000  # TF-IDF feature dimension
+    USE_BERT_FEATURES = True  # Use BERT (768-dim) or word frequency (1000-dim)
+    FEATURE_DIM = 768 if USE_BERT_FEATURES else 1000  # Feature dimension
     NUM_CLASSES = 2     # 2 classes: non-rumor(0) vs rumor(1)
     
     # ========== Model Configuration ==========
