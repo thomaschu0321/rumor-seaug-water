@@ -1,10 +1,8 @@
 # Visualization and Logging Guide
 
-This document explains the visualization and logging features added to the SeAug framework.
+This document explains the visualization and logging features of the SeAug framework.
 
----
-
-## 📁 Directory Structure
+## Directory Structure
 
 After running experiments, logs will be saved in the following structure:
 
@@ -26,9 +24,7 @@ RumorDetection_FYP/
 └── comparison_results_Twitter15_20251111_160000.json  (backup)
 ```
 
----
-
-## 📊 Visualization Outputs
+## Visualization Outputs
 
 ### 1. **Training History Plot** (`training_history_*.png`)
 

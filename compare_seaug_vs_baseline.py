@@ -77,7 +77,7 @@ def run_comparison(
         
         results['experiments'].append(exp_result)
         
-        print(f"\n✓ Baseline Results:")
+        print(f"\nBaseline Results:")
         print(f"  Accuracy:  {exp_result['test_accuracy']:.4f}")
         print(f"  Precision: {exp_result['test_precision']:.4f}")
         print(f"  Recall:    {exp_result['test_recall']:.4f}")
@@ -131,7 +131,7 @@ def run_comparison(
                 acc_improve = (exp_result['test_accuracy'] - results['experiments'][0]['test_accuracy']) * 100
                 f1_improve = (exp_result['test_f1'] - results['experiments'][0]['test_f1']) * 100
                 
-                print(f"\n✓ SeAug Results:")
+                print(f"\nSeAug Results:")
                 print(f"  Accuracy:  {exp_result['test_accuracy']:.4f} ({acc_improve:+.2f}%)")
                 print(f"  Precision: {exp_result['test_precision']:.4f}")
                 print(f"  Recall:    {exp_result['test_recall']:.4f}")
@@ -217,7 +217,7 @@ def run_comparison(
         f.write(f"Generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("="*70 + "\n")
     
-    print(f"\n✓ Results saved to:")
+    print(f"\nResults saved to:")
     print(f"  - {save_path_root}")
     print(f"  - {save_path_log}")
     
@@ -276,9 +276,9 @@ def quick_compare(
     print(f"  F1-Score: {(seaug_f1-baseline_f1)*100:+.2f}%")
     
     if seaug_f1 > baseline_f1:
-        print(f"\n✅ SeAug outperforms baseline!")
+        print(f"\nSeAug outperforms baseline")
     else:
-        print(f"\n⚠️  SeAug does not improve over baseline in this run.")
+        print(f"\nNote: SeAug does not improve over baseline in this run")
 
 
 def main():

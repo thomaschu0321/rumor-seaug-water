@@ -94,7 +94,7 @@ def run_gnn_backbone_comparison(
             
             results['experiments'].append(exp_result)
             
-            print(f"\n✓ {backbone.upper()}-Baseline Results:")
+            print(f"\n{backbone.upper()}-Baseline Results:")
             print(f"  Accuracy:  {exp_result['test_accuracy']:.4f}")
             print(f"  Precision: {exp_result['test_precision']:.4f}")
             print(f"  Recall:    {exp_result['test_recall']:.4f}")
@@ -145,7 +145,7 @@ def run_gnn_backbone_comparison(
             acc_improve = (exp_result['test_accuracy'] - baseline_exp['test_accuracy']) * 100
             f1_improve = (exp_result['test_f1'] - baseline_exp['test_f1']) * 100
             
-            print(f"\n✓ {backbone.upper()}+SeAug Results:")
+            print(f"\n{backbone.upper()}+SeAug Results:")
             print(f"  Accuracy:  {exp_result['test_accuracy']:.4f} ({acc_improve:+.2f}%)")
             print(f"  Precision: {exp_result['test_precision']:.4f}")
             print(f"  Recall:    {exp_result['test_recall']:.4f}")
@@ -236,7 +236,7 @@ def run_gnn_backbone_comparison(
     with open(save_path, 'w') as f:
         json.dump(results, f, indent=2)
     
-    print(f"\n✓ Results saved to: {save_path}")
+    print(f"\nResults saved to: {save_path}")
     
     return results
 

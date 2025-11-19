@@ -126,7 +126,7 @@ class SeAugRumorGNN(nn.Module):
         # Classification head
         self.fc = nn.Linear(hidden_dim, num_classes)
         
-        print(f"✓ SeAug GNN Model initialized")
+        print(f"SeAug GNN Model initialized")
         print(f"  GNN Backbone: {self.gnn_backbone.upper()}")
         if self.gnn_backbone == 'gat':
             print(f"  GAT Heads: {gat_heads}")

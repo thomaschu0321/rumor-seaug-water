@@ -1,11 +1,13 @@
 # SeAug Framework for Rumor Detection
+
 ## Overview
 
-SeAug (Selective LLM Augmentation Pipeline) implements a **4-stage node-level augmentation pipeline** for rumor detection on social media:
-- ✅ **Phase 1**: BERT extracts 768-dim semantic features (replacing TF-IDF)
-- ✅ **Phase 2**: DBSCAN identifies semantic outlier nodes (unsupervised)
-- ✅ **Phase 3**: LLM+LM selectively augments key nodes
-- ✅ **Phase 4**: Feature fusion + GNN classification
+SeAug (Selective LLM Augmentation Pipeline) implements a 4-stage node-level augmentation pipeline for rumor detection on social media:
+
+**Phase 1**: BERT extracts 768-dim semantic features (replacing TF-IDF)  
+**Phase 2**: DBSCAN identifies semantic outlier nodes (unsupervised)  
+**Phase 3**: LLM+LM selectively augments key nodes  
+**Phase 4**: Feature fusion + GNN classification
 
 python3 -m venv venv
 cd /Users/nerwen/Downloads/RumorDetection_FYP && source venv/bin/activate
@@ -39,7 +41,7 @@ python seaug_pipeline.py
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 Raw Tweets
     
@@ -61,9 +63,9 @@ Raw Tweets
 **Assumption**: Semantic outlier tweets (sarcasm, misinformation injection) are crucial for graph classification.
 
 
-## 📦 Project Structure
+## Project Structure
 
-### 🎯 Core SeAug Modules (7 files)
+### Core SeAug Modules (7 files)
 - `bert_feature_extractor.py` - Phase 1: BERT feature extraction
 - `node_selector.py` - Phase 2: DBSCAN node selection
 - `node_augmentor.py` - Phase 3: LLM+LM augmentation
@@ -72,28 +74,28 @@ Raw Tweets
 - `seaug_pipeline.py` - End-to-end pipeline orchestrator
 - `prompts.py` - LLM prompt templates
 
-### 🧪 Experiments & Testing (3 files)
+### Experiments & Testing (3 files)
 - `compare_seaug_vs_baseline.py` - Baseline vs SeAug comparison
 - `compare_gnn_backbones.py` - GCN vs GAT backbone comparison
 - `test_gat.py` - GAT implementation tests
 
-### 🔧 Infrastructure (3 files)
+### Infrastructure (3 files)
 - `config.py` - Project configuration
 - `data_preprocessing.py` - Data preprocessing utilities
 - `rate_limiter.py` - API rate limiting for LLM calls
 
-### 📊 Utilities
+### Utilities
 - `utils/`
   - `__init__.py` - Package initialization
   - `visualization.py` - Training & result visualization
 
-### 📚 Documentation
+### Documentation
 - `README.md` - Main documentation (this file)
 - `VISUALIZATION_GUIDE.md` - Visualization usage guide
 - `GAT_IMPLEMENTATION.md` - GAT implementation details
 - `requirements.txt` - Python dependencies
 
-### 📁 Data Directories
+### Data Directories
 - `data/`
   - `raw/` - Raw datasets (Twitter15/16, Weibo)
   - `processed/` - Preprocessed graph data (.pkl)
@@ -105,7 +107,7 @@ Raw Tweets
   - `Twitter15/` - Twitter15 experiment logs
   - `Twitter16/` - Twitter16 experiment logs
 
-### 📖 Additional Documentation
+### Additional Documentation
 - `docs/`
   - `README.md` - Documentation archive info
   - `GAT_IMPLEMENTATION_SUMMARY.md`
@@ -113,7 +115,7 @@ Raw Tweets
 
 ---
 
-### 📋 Quick Reference
+### Quick Reference
 
 | Category | Files | Purpose |
 |----------|-------|---------|
@@ -142,7 +144,7 @@ output = model(augmented_graphs)
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### Key Parameters in `config.py`
 
@@ -200,7 +202,7 @@ NUM_EPOCHS = 50
 
 ---
 
-## 📊 Datasets
+## Datasets
 
 ### Supported Datasets
 
@@ -219,22 +221,15 @@ NUM_EPOCHS = 50
 ---
 
 
-## 🎓 Academic Background
+## Technical Background
 
-SeAug framework combines advantages from:
+The SeAug framework combines several key techniques:
 
-- **GCN & GAT**: Graph Neural Networks for structure modeling
-- **BERT**: Pre-trained language model for semantic understanding
-- **DBSCAN**: Density-based clustering for unsupervised anomaly detection
-- **Selective Augmentation**: Node-level targeted enhancement
+- **GCN & GAT**: Graph Neural Networks for modeling propagation structure
+- **BERT**: Pre-trained language model for semantic feature extraction
+- **DBSCAN**: Density-based clustering for identifying outlier nodes
+- **Selective Augmentation**: Targeted enhancement of uncertain nodes
 
-### Why Multiple GNN Backbones?
+### Design Rationale
 
-We support both GCN and GAT to demonstrate that SeAug is a **generalizable framework** that works across different GNN architectures. This validates that the performance gain comes from selective augmentation, not from a specific GNN choice.
-
-### Key Publications
-
-This framework is inspired by recent advances in:
-1. Graph Neural Networks for fake news detection
-2. Pre-trained language models for social media analysis
-3. Selective data augmentation techniques
+The framework supports both GCN and GAT backbones to demonstrate that the performance improvements come from selective augmentation rather than a specific GNN architecture. This design validates the generalizability of the approach across different neural network architectures.

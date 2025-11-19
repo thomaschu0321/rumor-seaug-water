@@ -62,9 +62,9 @@ class SeAugPipeline:
         # Auto-disable augmentation if LLM is not enabled
         # (augmentation without LLM would just re-encode text with a weaker model)
         if enable_augmentation and not use_llm:
-            print("\n⚠️  WARNING: Augmentation enabled but LLM disabled!")
-            print("   Augmentation without LLM will degrade performance.")
-            print("   Auto-disabling augmentation. Use --use_llm to enable LLM.\n")
+            print("\nWARNING: Augmentation enabled but LLM disabled!")
+            print("Augmentation without LLM will degrade performance.")
+            print("Auto-disabling augmentation. Use --use_llm to enable LLM.\n")
             enable_augmentation = False
         
         self.enable_augmentation = enable_augmentation
@@ -116,7 +116,7 @@ class SeAugPipeline:
                 min_nodes=1,
                 max_nodes=10
             )
-            print("✓ Node Selector initialized")
+            print("Node Selector initialized")
             
             # Stage 3: LM Encoder and Node Augmentor
             print("\n[Stage 3] Initializing LM Encoder and Augmentor...")
@@ -128,9 +128,9 @@ class SeAugPipeline:
                 lm_encoder=self.lm_encoder,
                 use_llm=self.use_llm
             )
-            print("✓ LM Encoder and Augmentor initialized")
+            print("LM Encoder and Augmentor initialized")
         
-        print("\n✓ All components initialized")
+        print("\nAll components initialized")
     
     def process_data(
         self,
@@ -198,7 +198,7 @@ class SeAugPipeline:
         self.stats['total_graphs'] = len(graph_list)
         self.stats['total_nodes'] = sum(data.x.shape[0] for data in graph_list)
         
-        print(f"\n✓ Data loaded:")
+        print(f"\nData loaded:")
         print(f"  Train: {len(train_list)} graphs")
         print(f"  Val: {len(val_list)} graphs")
         print(f"  Test: {len(test_list)} graphs")
@@ -222,7 +222,7 @@ class SeAugPipeline:
             Augmented data list
         """
         if not self.enable_augmentation:
-            print(f"\n⚠️  Augmentation disabled, skipping...")
+            print(f"\nAugmentation disabled, skipping...")
             return data_list
         
         print("\n" + "="*70)
@@ -243,7 +243,7 @@ class SeAugPipeline:
         total_selected = sum(len(nodes) for nodes in selected_nodes_list)
         total_nodes = sum(data.x.shape[0] for data in data_list)
         
-        print(f"✓ Node selection completed:")
+        print(f"Node selection completed:")
         print(f"  Total nodes: {total_nodes:,}")
         print(f"  Selected nodes: {total_selected:,} ({total_selected/total_nodes*100:.1f}%)")
         
@@ -265,7 +265,7 @@ class SeAugPipeline:
         self.stats['augmentation_time'] += elapsed
         self.stats['augmented_nodes'] += total_selected
         
-        print(f"\n✓ Augmentation completed:")
+        print(f"\nAugmentation completed:")
         print(f"  Time: {elapsed:.2f}s")
         print(f"  Augmented embedding dim: {self.lm_encoder.embedding_dim}")
         
@@ -453,7 +453,7 @@ class SeAugPipeline:
                     print(f"\nEarly stopping at epoch {epoch+1}")
                     break
         
-        print(f"\n✓ Training completed")
+        print(f"\nTraining completed")
         print(f"  Best validation accuracy: {best_val_acc:.4f}")
         
         # Load best model and evaluate on test set
@@ -652,7 +652,7 @@ class SeAugPipeline:
                 config_info
             )
             
-            print("\n✓ All visualizations saved successfully!")
+            print("\nAll visualizations saved successfully")
             print("="*70)
         
         return results

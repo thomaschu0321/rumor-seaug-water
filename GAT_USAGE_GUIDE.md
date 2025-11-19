@@ -4,17 +4,9 @@
 
 This guide explains how to use the GAT (Graph Attention Network) backbone with the SeAug framework to demonstrate the generalizability of selective augmentation across different GNN architectures.
 
----
-
 ## Why GAT?
 
-**Purpose**: Demonstrate that SeAug is **architecture-agnostic**
-
-- SeAug's selective augmentation should work with different GNN backbones
-- If SeAug improves performance on both GCN and GAT, it proves the framework's generalizability
-- The goal is **consistent relative improvement**, not absolute performance
-
----
+The framework supports GAT to demonstrate architecture-agnostic performance. The goal is to show consistent relative improvements across different GNN backbones (GCN and GAT), validating that the performance gains come from the selective augmentation strategy rather than the specific neural network architecture.
 
 ## Quick Start
 
@@ -70,13 +62,9 @@ python compare_gnn_backbones.py --dataset Twitter15 \
 3. GCN + SeAug
 4. GAT + SeAug
 
----
-
 ## Understanding the Results
 
-### What to Look For
-
-**✓ Correct Interpretation:**
+### Interpreting Results
 
 ```
 GCN Backbone:
@@ -94,7 +82,7 @@ KEY FINDING:
   This demonstrates architecture-agnostic nature
 ```
 
-**Focus on**: Relative improvement is similar (both ~5%)
+The key metric is consistent relative improvement across both architectures.
 
 
 Input Features (768 or 1152-dim after fusion)
