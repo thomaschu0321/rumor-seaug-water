@@ -1,7 +1,7 @@
-# TAPE Framework for Rumor Detection
+# SeAug Framework for Rumor Detection
 ## Overview
 
-TAPE framework implements a **4-stage node-level augmentation pipeline** for rumor detection on social media:
+SeAug (Selective LLM Augmentation Pipeline) implements a **4-stage node-level augmentation pipeline** for rumor detection on social media:
 - ✅ **Phase 1**: BERT extracts 768-dim semantic features (replacing TF-IDF)
 - ✅ **Phase 2**: DBSCAN identifies semantic outlier nodes (unsupervised)
 - ✅ **Phase 3**: LLM+LM selectively augments key nodes
@@ -21,8 +21,8 @@ pip install transformers sentence-transformers torch-geometric  #for GNN
 # 2. Extract BERT features
 python bert_feature_extractor.py  #convert tweet into a 768-dimensional semantic vector. Results in data/processed/ directory.
 
-# 3. Run quick comparison (Baseline vs TAPE)
-python compare_tape_vs_baseline.py --mode quick --sample_ratio 0.05
+# 3. Run quick comparison (Baseline vs SeAug)
+python compare_seaug_vs_baseline.py --mode quick --sample_ratio 0.05
 ```
 
 
@@ -33,8 +33,8 @@ python bert_feature_extractor.py   # Test Phase 1
 python node_selector.py            # Test Phase 2  
 python node_augmentor.py           # Test Phase 3
 python feature_fusion.py           # Test Phase 4a
-python model_tape.py               # Test Phase 4b
-python tape_pipeline.py 
+python model_seaug.py              # Test Phase 4b
+python seaug_pipeline.py 
 ```
 
 ---
@@ -63,17 +63,17 @@ Raw Tweets
 
 ## 📦 Project Structure
 
-### 🎯 Core TAPE Modules (7 files)
+### 🎯 Core SeAug Modules (7 files)
 - `bert_feature_extractor.py` - Phase 1: BERT feature extraction
 - `node_selector.py` - Phase 2: DBSCAN node selection
 - `node_augmentor.py` - Phase 3: LLM+LM augmentation
 - `feature_fusion.py` - Phase 4a: Feature fusion strategies
-- `model_tape.py` - Phase 4b: TAPE GNN model (GCN/GAT)
-- `tape_pipeline.py` - End-to-end pipeline orchestrator
+- `model_seaug.py` - Phase 4b: SeAug GNN model (GCN/GAT)
+- `seaug_pipeline.py` - End-to-end pipeline orchestrator
 - `prompts.py` - LLM prompt templates
 
 ### 🧪 Experiments & Testing (3 files)
-- `compare_tape_vs_baseline.py` - Baseline vs TAPE comparison
+- `compare_seaug_vs_baseline.py` - Baseline vs SeAug comparison
 - `compare_gnn_backbones.py` - GCN vs GAT backbone comparison
 - `test_gat.py` - GAT implementation tests
 
@@ -99,8 +99,8 @@ Raw Tweets
   - `processed/` - Preprocessed graph data (.pkl)
   - `llm_cache.pkl` - LLM response cache
 - `checkpoints/` - Saved model checkpoints
-  - `Twitter15_tape_best.pt`
-  - `Twitter16_tape_best.pt`
+  - `Twitter15_seaug_best.pt`
+  - `Twitter16_seaug_best.pt`
 - `logs/` - Training logs & visualizations
   - `Twitter15/` - Twitter15 experiment logs
   - `Twitter16/` - Twitter16 experiment logs
@@ -117,7 +117,7 @@ Raw Tweets
 
 | Category | Files | Purpose |
 |----------|-------|---------|
-| **Core Modules** | 7 files | TAPE framework implementation (Phases 1-4) |
+| **Core Modules** | 7 files | SeAug framework implementation (Phases 1-4) |
 | **Experiments** | 3 files | Comparison scripts and testing |
 | **Infrastructure** | 3 files | Configuration and utilities |
 | **Documentation** | 4 files | User guides and technical docs |
@@ -136,7 +136,7 @@ augmentor = NodeAugmentor(use_llm=False)
 augmented_graphs = augmentor.augment_batch(bert_graphs, outlier_indices)
 
 # Phase 4: GNN classification
-model = TAPERumorGCN(baseline_dim=768, augmented_dim=384)
+model = SeAugRumorGCN(baseline_dim=768, augmented_dim=384)
 output = model(augmented_graphs)
 ```
 
@@ -221,7 +221,7 @@ NUM_EPOCHS = 50
 
 ## 🎓 Academic Background
 
-TAPE framework combines advantages from:
+SeAug framework combines advantages from:
 
 - **GCN & GAT**: Graph Neural Networks for structure modeling
 - **BERT**: Pre-trained language model for semantic understanding
@@ -230,7 +230,7 @@ TAPE framework combines advantages from:
 
 ### Why Multiple GNN Backbones?
 
-We support both GCN and GAT to demonstrate that TAPE is a **generalizable framework** that works across different GNN architectures. This validates that the performance gain comes from selective augmentation, not from a specific GNN choice.
+We support both GCN and GAT to demonstrate that SeAug is a **generalizable framework** that works across different GNN architectures. This validates that the performance gain comes from selective augmentation, not from a specific GNN choice.
 
 ### Key Publications
 

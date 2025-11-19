@@ -1,6 +1,6 @@
 # Visualization and Logging Guide
 
-This document explains the visualization and logging features added to the TAPE framework.
+This document explains the visualization and logging features added to the SeAug framework.
 
 ---
 
@@ -81,8 +81,8 @@ RumorDetection_FYP/
 ### Running Single Experiment
 
 ```bash
-# Run TAPE pipeline with augmentation
-python tape_pipeline.py --dataset Twitter15 --sample_ratio 0.05 --enable_augmentation
+# Run SeAug pipeline with augmentation
+python seaug_pipeline.py --dataset Twitter15 --sample_ratio 0.05 --enable_augmentation
 
 # Results will be saved to: logs/Twitter15/YYYY.MM.DD.HH:MM:SS/
 ```
@@ -90,6 +90,6 @@ python tape_pipeline.py --dataset Twitter15 --sample_ratio 0.05 --enable_augment
 ### Running Comparison Experiments
 
 ```bash
-# Compare baseline vs TAPE
-python compare_tape_vs_baseline.py --dataset Twitter15 --sample_ratio 0.05 --mode quick
+# Compare baseline vs SeAug
+python compare_seaug_vs_baseline.py --dataset Twitter15 --sample_ratio 0.05 --mode quick
 

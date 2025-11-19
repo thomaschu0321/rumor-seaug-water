@@ -2,7 +2,7 @@
 BERT Feature Extractor for Initial Node Features
 
 This module extracts 768-dimensional BERT features for each node (tweet) in the graph.
-These features serve as the X_initial (Initial Feature Matrix) for the TAPE framework.
+These features serve as the X_initial (Initial Feature Matrix) for the SeAug framework.
 
 Usage:
     - Extract BERT features from raw tweet text

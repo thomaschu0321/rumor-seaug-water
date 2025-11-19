@@ -1,5 +1,5 @@
 """
-Feature Fusion Module for TAPE Framework (Stage 4a)
+Feature Fusion Module for SeAug Framework (Stage 4a)
 
 This module fuses baseline features (TF-IDF) with augmented features (LM embeddings)
 to create hybrid node representations for GNN training.

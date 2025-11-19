@@ -1,13 +1,13 @@
 """
 Quick Test Script for GAT Implementation
 
-This script verifies that GAT backbone works correctly with TAPE framework.
+This script verifies that GAT backbone works correctly with SeAug framework.
 """
 
 import torch
 from torch_geometric.data import Data, Batch
 
-from model_tape import get_tape_model
+from model_seaug import get_seaug_model
 
 
 def test_gat_model():
@@ -55,8 +55,8 @@ def test_gat_model():
     print("Testing GCN Backbone")
     print(f"{'='*70}")
     
-    model_gcn = get_tape_model(
-        model_type="tape",
+    model_gcn = get_seaug_model(
+        model_type="seaug",
         gnn_backbone="gcn",
         baseline_dim=baseline_dim,
         augmented_dim=augmented_dim,
@@ -76,8 +76,8 @@ def test_gat_model():
     print("Testing GAT Backbone")
     print(f"{'='*70}")
     
-    model_gat = get_tape_model(
-        model_type="tape",
+    model_gat = get_seaug_model(
+        model_type="seaug",
         gnn_backbone="gat",
         baseline_dim=baseline_dim,
         augmented_dim=augmented_dim,

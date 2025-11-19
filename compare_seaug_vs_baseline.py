@@ -1,9 +1,9 @@
 """
-TAPE vs Baseline Comparison Experiment Script
+SeAug vs Baseline Comparison Experiment Script
 
 This script compares the performance of:
 1. Baseline GCN (no augmentation)
-2. TAPE Framework (with node-level augmentation)
+2. SeAug Framework (with node-level augmentation)
 """
 
 import argparse
@@ -11,7 +11,7 @@ import numpy as np
 from datetime import datetime
 import json
 
-from tape_pipeline import TAPEPipeline
+from seaug_pipeline import SeAugPipeline
 from config import Config
 
 
@@ -47,7 +47,7 @@ def run_comparison(
     }
     
     print("="*70)
-    print("TAPE vs Baseline Comparison")
+    print("SeAug vs Baseline Comparison")
     print("="*70)
     print(f"Dataset: {dataset_name}")
     print(f"Sample ratio: {sample_ratio}")
@@ -59,7 +59,7 @@ def run_comparison(
     print("="*70)
     
     try:
-        pipeline_baseline = TAPEPipeline(
+        pipeline_baseline = SeAugPipeline(
             enable_augmentation=False
         )
         
@@ -89,19 +89,19 @@ def run_comparison(
         traceback.print_exc()
         return None
     
-    # 2. TAPE with different configurations
+    # 2. SeAug with different configurations
     exp_num = 2
     
     for node_strat in node_strategies:
         for fusion_strat in fusion_strategies:
             print("\n" + "="*70)
-            print(f"Experiment {exp_num}: TAPE Framework")
+            print(f"Experiment {exp_num}: SeAug Framework")
             print(f"  Node selection: {node_strat}")
             print(f"  Fusion strategy: {fusion_strat}")
             print("="*70)
             
             try:
-                pipeline_tape = TAPEPipeline(
+                pipeline_seaug = SeAugPipeline(
                     enable_augmentation=True,
                     node_selection_strategy=node_strat,
                     fusion_strategy=fusion_strat,
@@ -109,20 +109,20 @@ def run_comparison(
                     use_llm=False  # Don't use LLM for speed
                 )
                 
-                tape_results = pipeline_tape.run(dataset_name, sample_ratio)
+                seaug_results = pipeline_seaug.run(dataset_name, sample_ratio)
                 
                 exp_result = {
-                    'name': f'TAPE-{fusion_strat}-{node_strat}',
+                    'name': f'SeAug-{fusion_strat}-{node_strat}',
                     'augmentation': True,
                     'node_strategy': node_strat,
                     'fusion_strategy': fusion_strat,
-                    'test_accuracy': tape_results['test_results']['accuracy'],
-                    'test_precision': tape_results['test_results']['precision'],
-                    'test_recall': tape_results['test_results']['recall'],
-                    'test_f1': tape_results['test_results']['f1'],
-                    'best_val_acc': tape_results['best_val_acc'],
-                    'augmented_nodes': pipeline_tape.stats['augmented_nodes'],
-                    'augmentation_time': pipeline_tape.stats['augmentation_time']
+                    'test_accuracy': seaug_results['test_results']['accuracy'],
+                    'test_precision': seaug_results['test_results']['precision'],
+                    'test_recall': seaug_results['test_results']['recall'],
+                    'test_f1': seaug_results['test_results']['f1'],
+                    'best_val_acc': seaug_results['best_val_acc'],
+                    'augmented_nodes': pipeline_seaug.stats['augmented_nodes'],
+                    'augmentation_time': pipeline_seaug.stats['augmentation_time']
                 }
                 
                 results['experiments'].append(exp_result)
@@ -131,7 +131,7 @@ def run_comparison(
                 acc_improve = (exp_result['test_accuracy'] - results['experiments'][0]['test_accuracy']) * 100
                 f1_improve = (exp_result['test_f1'] - results['experiments'][0]['test_f1']) * 100
                 
-                print(f"\n✓ TAPE Results:")
+                print(f"\n✓ SeAug Results:")
                 print(f"  Accuracy:  {exp_result['test_accuracy']:.4f} ({acc_improve:+.2f}%)")
                 print(f"  Precision: {exp_result['test_precision']:.4f}")
                 print(f"  Recall:    {exp_result['test_recall']:.4f}")
@@ -140,7 +140,7 @@ def run_comparison(
                 print(f"  Augmentation time: {exp_result['augmentation_time']:.2f}s")
                 
             except Exception as e:
-                print(f"✗ TAPE experiment {exp_num} failed: {e}")
+                print(f"✗ SeAug experiment {exp_num} failed: {e}")
                 import traceback
                 traceback.print_exc()
             
@@ -203,7 +203,7 @@ def run_comparison(
     summary_path = os.path.join(log_dir, f'comparison_summary_{timestamp_str}.txt')
     with open(summary_path, 'w') as f:
         f.write("="*70 + "\n")
-        f.write(f"TAPE vs Baseline Comparison - {dataset_name}\n")
+        f.write(f"SeAug vs Baseline Comparison - {dataset_name}\n")
         f.write("="*70 + "\n\n")
         
         for exp in results['experiments']:
@@ -229,29 +229,29 @@ def quick_compare(
     sample_ratio: float = 0.05
 ):
     """
-    Quick comparison: Baseline vs TAPE (concat fusion only)
+    Quick comparison: Baseline vs SeAug (concat fusion only)
     
     Args:
         dataset_name: Dataset name
         sample_ratio: Sampling ratio
     """
     print("="*70)
-    print("Quick Comparison: Baseline vs TAPE")
+    print("Quick Comparison: Baseline vs SeAug")
     print("="*70)
     
     # Baseline
     print("\n1. Running Baseline...")
-    pipeline_baseline = TAPEPipeline(enable_augmentation=False)
+    pipeline_baseline = SeAugPipeline(enable_augmentation=False)
     baseline_results = pipeline_baseline.run(dataset_name, sample_ratio)
     
-    # TAPE
-    print("\n2. Running TAPE (concat fusion)...")
-    pipeline_tape = TAPEPipeline(
+    # SeAug
+    print("\n2. Running SeAug (concat fusion)...")
+    pipeline_seaug = SeAugPipeline(
         enable_augmentation=True,
         fusion_strategy="concat",
         node_selection_strategy="hybrid"
     )
-    tape_results = pipeline_tape.run(dataset_name, sample_ratio)
+    seaug_results = pipeline_seaug.run(dataset_name, sample_ratio)
     
     # Compare
     print("\n" + "="*70)
@@ -260,31 +260,31 @@ def quick_compare(
     
     baseline_acc = baseline_results['test_results']['accuracy']
     baseline_f1 = baseline_results['test_results']['f1']
-    tape_acc = tape_results['test_results']['accuracy']
-    tape_f1 = tape_results['test_results']['f1']
+    seaug_acc = seaug_results['test_results']['accuracy']
+    seaug_f1 = seaug_results['test_results']['f1']
     
     print(f"\nBaseline:")
     print(f"  Accuracy: {baseline_acc:.4f}")
     print(f"  F1-Score: {baseline_f1:.4f}")
     
-    print(f"\nTAPE:")
-    print(f"  Accuracy: {tape_acc:.4f} ({(tape_acc-baseline_acc)*100:+.2f}%)")
-    print(f"  F1-Score: {tape_f1:.4f} ({(tape_f1-baseline_f1)*100:+.2f}%)")
+    print(f"\nSeAug:")
+    print(f"  Accuracy: {seaug_acc:.4f} ({(seaug_acc-baseline_acc)*100:+.2f}%)")
+    print(f"  F1-Score: {seaug_f1:.4f} ({(seaug_f1-baseline_f1)*100:+.2f}%)")
     
     print(f"\nImprovement:")
-    print(f"  Accuracy: {(tape_acc-baseline_acc)*100:+.2f}%")
-    print(f"  F1-Score: {(tape_f1-baseline_f1)*100:+.2f}%")
+    print(f"  Accuracy: {(seaug_acc-baseline_acc)*100:+.2f}%")
+    print(f"  F1-Score: {(seaug_f1-baseline_f1)*100:+.2f}%")
     
-    if tape_f1 > baseline_f1:
-        print(f"\n✅ TAPE outperforms baseline!")
+    if seaug_f1 > baseline_f1:
+        print(f"\n✅ SeAug outperforms baseline!")
     else:
-        print(f"\n⚠️  TAPE does not improve over baseline in this run.")
+        print(f"\n⚠️  SeAug does not improve over baseline in this run.")
 
 
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description="Compare TAPE vs Baseline performance"
+        description="Compare SeAug vs Baseline performance"
     )
     
     parser.add_argument('--dataset', type=str, default='Twitter15',

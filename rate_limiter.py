@@ -36,7 +36,7 @@ class RateLimiter:
         # Quota tracking file (in project directory)
         if quota_file is None:
             project_root = Path(__file__).parent
-            quota_file = project_root / 'data' / '.tape_api_quota.json'
+            quota_file = project_root / 'data' / '.seaug_api_quota.json'
             # Ensure data directory exists
             quota_file.parent.mkdir(parents=True, exist_ok=True)
         self.quota_file = Path(quota_file)

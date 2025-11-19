@@ -1,5 +1,5 @@
 """
-Node Selection Module for TAPE Framework (Phase 2)
+Node Selection Module for SeAug Framework (Phase 2)
 
 This module implements adaptive node selection using DBSCAN clustering
 to identify outlier/uncertain nodes that should be augmented with LLM.

@@ -2,16 +2,16 @@
 
 ## Overview
 
-This guide explains how to use the GAT (Graph Attention Network) backbone with the TAPE framework to demonstrate the generalizability of selective augmentation across different GNN architectures.
+This guide explains how to use the GAT (Graph Attention Network) backbone with the SeAug framework to demonstrate the generalizability of selective augmentation across different GNN architectures.
 
 ---
 
 ## Why GAT?
 
-**Purpose**: Demonstrate that TAPE is **architecture-agnostic**
+**Purpose**: Demonstrate that SeAug is **architecture-agnostic**
 
-- TAPE's selective augmentation should work with different GNN backbones
-- If TAPE improves performance on both GCN and GAT, it proves the framework's generalizability
+- SeAug's selective augmentation should work with different GNN backbones
+- If SeAug improves performance on both GCN and GAT, it proves the framework's generalizability
 - The goal is **consistent relative improvement**, not absolute performance
 
 ---
@@ -42,12 +42,12 @@ Difference: 256 parameters
 
 ```bash
 # Baseline (no augmentation)
-python tape_pipeline.py --dataset Twitter15 \
+python seaug_pipeline.py --dataset Twitter15 \
                        --sample_ratio 0.05 \
                        --gnn_backbone gat
 
-# TAPE with GAT
-python tape_pipeline.py --dataset Twitter15 \
+# SeAug with GAT
+python seaug_pipeline.py --dataset Twitter15 \
                        --sample_ratio 0.05 \
                        --gnn_backbone gat \
                        --enable_augmentation \
@@ -67,8 +67,8 @@ python compare_gnn_backbones.py --dataset Twitter15 \
 **This script automatically runs 4 experiments:**
 1. GCN-Baseline
 2. GAT-Baseline
-3. GCN + TAPE
-4. GAT + TAPE
+3. GCN + SeAug
+4. GAT + SeAug
 
 ---
 
@@ -81,16 +81,16 @@ python compare_gnn_backbones.py --dataset Twitter15 \
 ```
 GCN Backbone:
   Baseline:     Acc=80.2%, F1=78.5%
-  +TAPE:        Acc=85.4%, F1=83.7%
+  +SeAug:       Acc=85.4%, F1=83.7%
   Improvement:  Acc=+5.2%, F1=+5.2%
 
 GAT Backbone:
   Baseline:     Acc=82.1%, F1=80.3%
-  +TAPE:        Acc=87.5%, F1=85.8%
+  +SeAug:       Acc=87.5%, F1=85.8%
   Improvement:  Acc=+5.4%, F1=+5.5%
 
 KEY FINDING:
-  TAPE provides consistent improvement (~5%) across different backbones
+  SeAug provides consistent improvement (~5%) across different backbones
   This demonstrates architecture-agnostic nature
 ```
 

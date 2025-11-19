@@ -1,5 +1,5 @@
 """
-Node-Level Augmentation Module for TAPE Framework (Stage 3)
+Node-Level Augmentation Module for SeAug Framework (Stage 3)
 
 This module implements node-level LLM augmentation and LM encoding.
 Unlike graph-level augmentation, this enhances individual nodes' features.

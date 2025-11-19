@@ -1,8 +1,8 @@
 """
-Enhanced GNN Model with Feature Fusion for TAPE Framework (Stage 4b)
+Enhanced GNN Model with Feature Fusion for SeAug Framework (Stage 4b)
 
 This model supports multiple GNN backbones (GCN, GAT) with feature fusion
-to demonstrate the generalizability of the TAPE framework.
+to demonstrate the generalizability of the SeAug framework.
 """
 
 import torch
@@ -15,9 +15,9 @@ from typing import Optional
 from feature_fusion import FeatureFusion
 
 
-class TAPERumorGNN(nn.Module):
+class SeAugRumorGNN(nn.Module):
     """
-    GNN model with integrated feature fusion for TAPE framework
+    GNN model with integrated feature fusion for SeAug framework
     Supports multiple GNN backbones (GCN, GAT) to demonstrate generalizability
     
     Architecture:
@@ -41,7 +41,7 @@ class TAPERumorGNN(nn.Module):
         gat_heads: int = 4
     ):
         """
-        Initialize TAPE GNN Model
+        Initialize SeAug GNN Model
         
         Args:
             baseline_dim: Dimension of baseline features (TF-IDF)
@@ -55,7 +55,7 @@ class TAPERumorGNN(nn.Module):
             gnn_backbone: GNN backbone type ('gcn' or 'gat')
             gat_heads: Number of attention heads for GAT (only used if backbone='gat')
         """
-        super(TAPERumorGNN, self).__init__()
+        super(SeAugRumorGNN, self).__init__()
         
         self.baseline_dim = baseline_dim
         self.augmented_dim = augmented_dim
@@ -126,7 +126,7 @@ class TAPERumorGNN(nn.Module):
         # Classification head
         self.fc = nn.Linear(hidden_dim, num_classes)
         
-        print(f"✓ TAPE GNN Model initialized")
+        print(f"✓ SeAug GNN Model initialized")
         print(f"  GNN Backbone: {self.gnn_backbone.upper()}")
         if self.gnn_backbone == 'gat':
             print(f"  GAT Heads: {gat_heads}")
@@ -232,7 +232,7 @@ class TAPERumorGNN(nn.Module):
         return predictions, confidences
 
 
-class HybridTAPEGCN(nn.Module):
+class HybridSeAugGCN(nn.Module):
     """
     Hybrid model that can switch between baseline-only and fusion modes
     
@@ -248,10 +248,10 @@ class HybridTAPEGCN(nn.Module):
         dropout: float = 0.3,
         fusion_strategy: str = "concat"
     ):
-        super(HybridTAPEGCN, self).__init__()
+        super(HybridSeAugGCN, self).__init__()
         
         # Baseline-only branch
-        self.baseline_branch = TAPERumorGCN(
+        self.baseline_branch = SeAugRumorGNN(
             baseline_dim=baseline_dim,
             augmented_dim=augmented_dim,
             hidden_dim=hidden_dim,
@@ -261,7 +261,7 @@ class HybridTAPEGCN(nn.Module):
         )
         
         # Fusion branch
-        self.fusion_branch = TAPERumorGCN(
+        self.fusion_branch = SeAugRumorGNN(
             baseline_dim=baseline_dim,
             augmented_dim=augmented_dim,
             hidden_dim=hidden_dim,
@@ -326,8 +326,8 @@ class HybridTAPEGCN(nn.Module):
         }
 
 
-def get_tape_model(
-    model_type: str = "tape",
+def get_seaug_model(
+    model_type: str = "seaug",
     gnn_backbone: str = "gcn",
     baseline_dim: int = 1000,
     augmented_dim: int = 384,
@@ -338,11 +338,11 @@ def get_tape_model(
     gat_heads: int = 4
 ):
     """
-    Factory function to create TAPE models with different GNN backbones
+    Factory function to create SeAug models with different GNN backbones
     
     Args:
         model_type: Type of model
-            - "tape": Standard TAPE GNN with fusion
+            - "seaug": Standard SeAug GNN with fusion
             - "baseline": GNN without fusion (baseline only)
         gnn_backbone: GNN backbone type ('gcn' or 'gat')
         baseline_dim: Baseline feature dimension
@@ -356,8 +356,8 @@ def get_tape_model(
     Returns:
         Model instance
     """
-    if model_type == "tape":
-        return TAPERumorGNN(
+    if model_type == "seaug":
+        return SeAugRumorGNN(
             baseline_dim=baseline_dim,
             augmented_dim=augmented_dim,
             hidden_dim=hidden_dim,
@@ -370,7 +370,7 @@ def get_tape_model(
         )
     
     elif model_type == "baseline":
-        return TAPERumorGNN(
+        return SeAugRumorGNN(
             baseline_dim=baseline_dim,
             augmented_dim=augmented_dim,
             hidden_dim=hidden_dim,
@@ -385,115 +385,19 @@ def get_tape_model(
         raise ValueError(f"Unknown model type: {model_type}")
 
 
-# Backward compatibility: keep TAPERumorGCN as alias for GCN backbone
-class TAPERumorGCN(TAPERumorGNN):
+# Backward compatibility: keep old names as aliases
+class SeAugRumorGCN(SeAugRumorGNN):
     """
-    Backward compatibility wrapper for TAPERumorGNN with GCN backbone
+    Backward compatibility wrapper for SeAugRumorGNN with GCN backbone
     """
     def __init__(self, **kwargs):
         kwargs['gnn_backbone'] = 'gcn'
         super().__init__(**kwargs)
 
 
-if __name__ == '__main__':
-    print("="*70)
-    print("Testing TAPE GCN Models")
-    print("="*70)
-    
-    from torch_geometric.data import Data, Batch
-    
-    # Create dummy data with augmented features
-    data1 = Data(
-        x=torch.randn(10, 1000),  # Baseline features
-        x_aug=torch.randn(10, 384),  # Augmented features
-        edge_index=torch.tensor([[0, 0, 1, 2, 3], [1, 2, 3, 4, 5]], dtype=torch.long),
-        y=torch.tensor([1]),
-        augmented_node_mask=torch.tensor([True, True, False, True, False, 
-                                         False, True, False, False, True])
-    )
-    
-    data2 = Data(
-        x=torch.randn(8, 1000),
-        x_aug=torch.randn(8, 384),
-        edge_index=torch.tensor([[0, 0, 1, 2], [1, 2, 3, 4]], dtype=torch.long),
-        y=torch.tensor([0]),
-        augmented_node_mask=torch.tensor([False, True, True, False, True, False, False, True])
-    )
-    
-    # Create batch
-    batch = Batch.from_data_list([data1, data2])
-    
-    print(f"\nTest data:")
-    print(f"  Batch size: 2")
-    print(f"  Total nodes: {batch.x.shape[0]}")
-    print(f"  Baseline features: {batch.x.shape}")
-    print(f"  Augmented features: {batch.x_aug.shape}")
-    print(f"  Augmented nodes: {batch.augmented_node_mask.sum()}/{len(batch.augmented_node_mask)}")
-    
-    # Test different fusion strategies
-    strategies = ["concat", "weighted", "gated", "attention"]
-    
-    for strategy in strategies:
-        print(f"\n{'='*70}")
-        print(f"Testing Fusion Strategy: {strategy}")
-        print(f"{'='*70}")
-        
-        model = TAPERumorGCN(
-            baseline_dim=1000,
-            augmented_dim=384,
-            hidden_dim=64,
-            num_classes=2,
-            use_fusion=True,
-            fusion_strategy=strategy
-        )
-        
-        # Forward pass
-        output = model(batch)
-        print(f"\nForward pass:")
-        print(f"  Output shape: {output.shape}")
-        print(f"  Expected: [2, 2] (batch_size, num_classes)")
-        
-        # Get embeddings
-        embeddings = model.get_embeddings(batch)
-        print(f"\nEmbeddings:")
-        print(f"  Shape: {embeddings.shape}")
-        print(f"  Expected: [2, 64] (batch_size, hidden_dim)")
-        
-        # Predict with confidence
-        preds, confs = model.predict_with_confidence(batch)
-        print(f"\nPredictions:")
-        print(f"  Predictions: {preds}")
-        print(f"  Confidences: {confs}")
-        
-        # Count parameters
-        num_params = sum(p.numel() for p in model.parameters())
-        print(f"\nModel parameters: {num_params:,}")
-    
-    # Test hybrid model
-    print(f"\n{'='*70}")
-    print("Testing Hybrid Model")
-    print(f"{'='*70}")
-    
-    hybrid_model = HybridTAPEGCN(
-        baseline_dim=1000,
-        augmented_dim=384,
-        hidden_dim=64,
-        num_classes=2
-    )
-    
-    results = hybrid_model.compare_modes(batch)
-    
-    print("\nBaseline mode:")
-    print(f"  Predictions: {results['baseline']['predictions']}")
-    print(f"  Confidences: {results['baseline']['confidences']}")
-    
-    print("\nFusion mode:")
-    print(f"  Predictions: {results['fusion']['predictions']}")
-    print(f"  Confidences: {results['fusion']['confidences']}")
-    
-    print("\n" + "="*70)
-    print("✓ TAPE GCN Models test completed!")
-    print("="*70)
-
-
+# Legacy TAPE names for backward compatibility
+TAPERumorGNN = SeAugRumorGNN
+TAPERumorGCN = SeAugRumorGCN
+HybridTAPEGCN = HybridSeAugGCN
+get_tape_model = get_seaug_model
 

@@ -1,7 +1,7 @@
 """
-TAPE Framework - Complete End-to-End Pipeline
+SeAug Framework - Complete End-to-End Pipeline
 
-This script implements the complete TAPE (Text Augmentation with Pre-trained Encoders)
+This script implements the complete SeAug (Selective LLM Augmentation Pipeline)
 framework for rumor detection with the following stages:
 
 Stage 1: Initial Feature Extraction (baseline TF-IDF features)
@@ -10,7 +10,7 @@ Stage 3: Selective Augmentation & Encoding (LLM + LM)
 Stage 4: Feature Fusion & GNN Classification
 
 Usage:
-    python tape_pipeline.py --dataset Twitter15 --enable_augmentation
+    python seaug_pipeline.py --dataset Twitter15 --enable_augmentation
 """
 
 import os
@@ -25,14 +25,14 @@ from config import Config
 from data_preprocessing import TwitterDataProcessor, WeiboDataProcessor, split_data
 from node_selector import NodeSelector
 from node_augmentor import LanguageModelEncoder, NodeAugmentor
-from model_tape import get_tape_model
+from model_seaug import get_seaug_model
 from torch_geometric.loader import DataLoader
 # Note: utils module not needed - functions not used in this script
 
 
-class TAPEPipeline:
+class SeAugPipeline:
     """
-    Complete TAPE Framework Pipeline
+    Complete SeAug Framework Pipeline
     """
     
     def __init__(
@@ -46,7 +46,7 @@ class TAPEPipeline:
         gnn_backbone: str = "gcn"
     ):
         """
-        Initialize TAPE Pipeline
+        Initialize SeAug Pipeline
         
         Args:
             config: Configuration object
@@ -89,7 +89,7 @@ class TAPEPipeline:
         }
         
         print("="*70)
-        print("TAPE Framework Pipeline Initialized")
+        print("SeAug Framework Pipeline Initialized")
         print("="*70)
         print(f"  GNN Backbone: {gnn_backbone.upper()}")
         print(f"  Augmentation enabled: {enable_augmentation}")
@@ -104,7 +104,7 @@ class TAPEPipeline:
         Setup pipeline components
         """
         print("\n" + "="*70)
-        print("Setting up TAPE Components")
+        print("Setting up SeAug Components")
         print("="*70)
         
         if self.enable_augmentation:
@@ -297,8 +297,8 @@ class TAPEPipeline:
         # Create model
         augmented_dim = self.lm_encoder.embedding_dim if self.enable_augmentation else 0
         
-        self.model = get_tape_model(
-            model_type="tape" if self.enable_augmentation else "baseline",
+        self.model = get_seaug_model(
+            model_type="seaug" if self.enable_augmentation else "baseline",
             gnn_backbone=self.gnn_backbone,
             baseline_dim=self.config.FEATURE_DIM,
             augmented_dim=augmented_dim,
@@ -446,7 +446,7 @@ class TAPEPipeline:
                 patience_counter = 0
                 # Save best model
                 torch.save(self.model.state_dict(), 
-                          os.path.join(self.config.SAVE_DIR, f'{dataset_name}_tape_best.pt'))
+                          os.path.join(self.config.SAVE_DIR, f'{dataset_name}_seaug_best.pt'))
             else:
                 patience_counter += 1
                 if patience_counter >= self.config.PATIENCE:
@@ -458,7 +458,7 @@ class TAPEPipeline:
         
         # Load best model and evaluate on test set
         self.model.load_state_dict(
-            torch.load(os.path.join(self.config.SAVE_DIR, f'{dataset_name}_tape_best.pt'))
+            torch.load(os.path.join(self.config.SAVE_DIR, f'{dataset_name}_seaug_best.pt'))
         )
         
         test_results = self._evaluate(test_loader, return_predictions=True)
@@ -536,7 +536,7 @@ class TAPEPipeline:
     
     def run(self, dataset_name: str, sample_ratio: float = 1.0):
         """
-        Run complete TAPE pipeline
+        Run complete SeAug pipeline
         
         Args:
             dataset_name: Dataset name
@@ -546,7 +546,7 @@ class TAPEPipeline:
             Results dictionary
         """
         print("\n" + "="*70)
-        print(f"Running TAPE Pipeline on {dataset_name}")
+        print(f"Running SeAug Pipeline on {dataset_name}")
         print("="*70)
         
         # Setup
@@ -566,7 +566,7 @@ class TAPEPipeline:
         
         # Print final results
         print("\n" + "="*70)
-        print("TAPE Pipeline Completed!")
+        print("SeAug Pipeline Completed!")
         print("="*70)
         print(f"\nFinal Test Results:")
         print(f"  Accuracy:  {results['test_results']['accuracy']:.4f}")
@@ -626,9 +626,9 @@ class TAPEPipeline:
             # Save results summary
             # Determine model description
             if self.enable_augmentation and self.use_llm:
-                model_desc = "TAPE with LLM"
+                model_desc = "SeAug with LLM"
             elif self.enable_augmentation:
-                model_desc = "TAPE without LLM (should not happen - auto-disabled)"
+                model_desc = "SeAug without LLM (should not happen - auto-disabled)"
             else:
                 model_desc = "Baseline (No Augmentation)"
             
@@ -661,7 +661,7 @@ class TAPEPipeline:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description="TAPE Framework for Rumor Detection",
+        description="SeAug Framework for Rumor Detection",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -672,7 +672,7 @@ def main():
     parser.add_argument('--sample_ratio', type=float, default=1.0,
                        help='Data sampling ratio')
     
-    # TAPE parameters
+    # SeAug parameters
     parser.add_argument('--enable_augmentation', action='store_true',
                        help='Enable node-level augmentation')
     parser.add_argument('--node_strategy', type=str, default='hybrid',
@@ -692,7 +692,7 @@ def main():
     args = parser.parse_args()
     
     # Create pipeline
-    pipeline = TAPEPipeline(
+    pipeline = SeAugPipeline(
         enable_augmentation=args.enable_augmentation,
         node_selection_strategy=args.node_strategy,
         fusion_strategy=args.fusion_strategy,

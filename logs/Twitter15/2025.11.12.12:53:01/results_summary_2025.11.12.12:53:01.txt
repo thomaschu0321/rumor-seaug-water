@@ -1,0 +1,28 @@
+======================================================================
+Model Evaluation Results Summary - Twitter15
+======================================================================
+
+Test Set Results:
+  Accuracy:  0.7828
+  Precision: 0.8701
+  Recall:    0.8272
+  F1-Score:  0.8481
+
+Training Process:
+  Total Epochs: 23
+  Final Training Loss: 0.0585
+  Final Validation Loss: 0.7153
+  Best Validation Accuracy: 0.8227
+  Best Validation F1: 0.8785
+
+Configuration:
+  Enable Augmentation: False
+  Node Strategy: hybrid
+  Fusion Strategy: concat
+  Augmentation Ratio: 0.3
+  GNN Backbone: gcn
+  Sample Ratio: 1.0
+
+======================================================================
+Generated at: 2025-11-12 12:53:02
+======================================================================
