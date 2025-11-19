@@ -238,5 +238,3 @@ This framework is inspired by recent advances in:
 1. Graph Neural Networks for fake news detection
 2. Pre-trained language models for social media analysis
 3. Selective data augmentation techniques
-
--
