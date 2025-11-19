@@ -88,6 +88,9 @@ class RateLimiter:
         Returns:
             (can_call: bool, reason: str, wait_time: float)
         """
+        # Reload quota to ensure we have the latest data
+        self.load_quota()
+        
         # Check weekly quota
         if self.weekly_calls >= self.calls_per_week:
             days_until_reset = 7 - (datetime.now() - self.week_start).days

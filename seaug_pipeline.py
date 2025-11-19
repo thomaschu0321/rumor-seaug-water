@@ -43,7 +43,8 @@ class SeAugPipeline:
         fusion_strategy: str = "concat",
         augmentation_ratio: float = 0.3,
         use_llm: bool = False,
-        gnn_backbone: str = "gcn"
+        gnn_backbone: str = "gcn",
+        batch_size: int = 20
     ):
         """
         Initialize SeAug Pipeline
@@ -56,6 +57,7 @@ class SeAugPipeline:
             augmentation_ratio: Ratio of nodes to augment per graph
             use_llm: Whether to use LLM for augmentation
             gnn_backbone: GNN backbone type ('gcn' or 'gat')
+            batch_size: Number of nodes per API call for batched processing (default: 20)
         """
         self.config = config or Config()
         
@@ -73,6 +75,7 @@ class SeAugPipeline:
         self.augmentation_ratio = augmentation_ratio
         self.use_llm = use_llm
         self.gnn_backbone = gnn_backbone
+        self.batch_size = batch_size
         
         # Components
         self.node_selector = None
@@ -97,6 +100,8 @@ class SeAugPipeline:
         print(f"  Fusion strategy: {fusion_strategy}")
         print(f"  Augmentation ratio: {augmentation_ratio}")
         print(f"  Use LLM: {use_llm}")
+        if enable_augmentation and use_llm:
+            print(f"  Batch size: {batch_size} nodes/call (Token optimized!)")
         print("="*70)
     
     def setup_components(self):
@@ -253,12 +258,14 @@ class SeAugPipeline:
         
         # Stage 3: Augment selected nodes
         print("\n[Stage 3] Augmenting selected nodes...")
+        print(f"  Using batched API calls: {self.batch_size} nodes per call")
         
         augmented_list = self.node_augmentor.augment_batch(
             data_list,
             selected_nodes_list,
             texts_list=None,  # Would need actual texts here
-            verbose=True
+            verbose=True,
+            batch_size=self.batch_size
         )
         
         elapsed = time.time() - start_time
@@ -688,6 +695,8 @@ def main():
     parser.add_argument('--gnn_backbone', type=str, default='gcn',
                        choices=['gcn', 'gat'],
                        help='GNN backbone type')
+    parser.add_argument('--batch_size', type=int, default=20,
+                       help='Number of nodes per API call for batched processing (default: 20, recommended: 10-20)')
     
     args = parser.parse_args()
     
@@ -698,7 +707,8 @@ def main():
         fusion_strategy=args.fusion_strategy,
         augmentation_ratio=args.augmentation_ratio,
         use_llm=args.use_llm,
-        gnn_backbone=args.gnn_backbone
+        gnn_backbone=args.gnn_backbone,
+        batch_size=args.batch_size
     )
     
     # Run pipeline

@@ -113,21 +113,13 @@ class Config:
         print("✓ Project directories created")
     
     # ========== LLM Configuration ==========
-    # Azure OpenAI vs Standard OpenAI
-    USE_AZURE_OPENAI = os.environ.get('USE_AZURE_OPENAI', 'false').lower() == 'true'
-    
-    # Standard OpenAI Configuration
-    OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-    OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
-    OPENAI_BASE_URL = os.environ.get('OPENAI_BASE_URL', 'https://api.openai.com/v1')
-    
-    # Azure API Management (CUHK-style)
+    # Azure OpenAI Configuration (CUHK-style)
     AZURE_API_KEY = os.environ.get('AZURE_API_KEY')
     AZURE_ENDPOINT = os.environ.get('AZURE_ENDPOINT', 'https://cuhk-apip.azure-api.net')
     AZURE_MODEL = os.environ.get('AZURE_MODEL', 'gpt-4o-mini')
     API_VERSION = os.environ.get('API_VERSION', '2023-05-15')  # CUHK uses 2023-05-15
     
-    # Unified LLM Parameters (works for both)
+    # LLM Parameters
     LLM_MAX_TOKENS = int(os.environ.get('LLM_MAX_TOKENS', '500'))
     LLM_TEMPERATURE = float(os.environ.get('LLM_TEMPERATURE', '0.7'))
     LLM_AUGMENTATION_FACTOR = int(os.environ.get('LLM_AUGMENTATION_FACTOR', '5'))

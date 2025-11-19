@@ -33,12 +33,11 @@ except ImportError:
 
 # Import LLM client
 try:
-    from openai import OpenAI, AzureOpenAI
-    import requests
+    from openai import AzureOpenAI
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
-    print("⚠️  Warning: OpenAI not installed. LLM augmentation disabled.")
+    print("⚠️  Warning: openai package not installed. LLM augmentation disabled.")
 
 
 class LanguageModelEncoder:
@@ -172,8 +171,8 @@ class NodeAugmentor:
         Args:
             lm_encoder: Language Model encoder instance
             use_llm: Whether to use LLM for augmentation
-            api_key: OpenAI API key
-            model: Model name
+            api_key: Azure OpenAI API key (optional, defaults to Config.AZURE_API_KEY)
+            model: Model name (optional, defaults to Config.AZURE_MODEL)
             temperature: Generation temperature
             max_tokens: Max tokens per generation
         """
@@ -209,39 +208,32 @@ class NodeAugmentor:
             )
     
     def _init_llm_client(self, api_key: str = None, model: str = None):
-        """Initialize LLM client"""
+        """Initialize LLM client - Azure OpenAI only"""
         try:
-            # Check if using Azure APIM
-            if Config.USE_AZURE_OPENAI and Config.AZURE_API_KEY:
-                self.use_apim = True
-                self.api_key = api_key or Config.AZURE_API_KEY
-                self.endpoint = Config.AZURE_ENDPOINT
-                self.model = model or Config.AZURE_MODEL
-                self.api_version = Config.API_VERSION
-                
-                # Use AzureOpenAI SDK (CUHK format)
-                from openai import AzureOpenAI
-                self.client = AzureOpenAI(
-                    azure_endpoint=self.endpoint,
-                    api_version=self.api_version,
-                    api_key=self.api_key
-                )
-                print(f"✓ LLM Client initialized (Azure APIM)")
-            else:
-                # Standard OpenAI
-                self.use_apim = False
-                self.api_key = api_key or Config.OPENAI_API_KEY
-                self.model = model or Config.OPENAI_MODEL
-                self.client = OpenAI(
-                    api_key=self.api_key,
-                    base_url=Config.OPENAI_BASE_URL
-                )
-                print(f"✓ LLM Client initialized (OpenAI)")
-                
+            # Use Azure OpenAI API only
+            if not Config.AZURE_API_KEY:
+                raise ValueError("AZURE_API_KEY is not set. Please configure it in your .env file.")
+            
+            self.use_apim = True
+            self.api_key = api_key or Config.AZURE_API_KEY
+            self.endpoint = Config.AZURE_ENDPOINT
+            self.model = model or Config.AZURE_MODEL
+            self.api_version = Config.API_VERSION
+            
+            # Use AzureOpenAI SDK
+            from openai import AzureOpenAI
+            self.client = AzureOpenAI(
+                azure_endpoint=self.endpoint,
+                api_version=self.api_version,
+                api_key=self.api_key
+            )
+            print(f"✓ LLM Client initialized (Azure OpenAI)")
             print(f"  Model: {self.model}")
+            print(f"  Endpoint: {self.endpoint}")
             
         except Exception as e:
             print(f"⚠️  Error initializing LLM: {e}")
+            print(f"   Make sure AZURE_API_KEY is set in your .env file")
             self.use_llm = False
     
     def _call_llm(self, prompt: str) -> str:
@@ -328,11 +320,137 @@ Paraphrased version (one line only):"""
         augmented = self._call_llm(prompt)
         return augmented if augmented else text
     
+    def augment_batch_texts(self, texts: List[str], batch_size: int = 20) -> List[str]:
+        """
+        Augment multiple texts in batched API calls (TOKEN EFFICIENT!)
+        
+        This method batches multiple nodes together in single API calls,
+        significantly reducing token usage by sharing system prompt and
+        instructions across multiple texts.
+        
+        Token savings example:
+        - Individual calls (20 nodes): ~2,600 tokens, 20 API calls
+        - Batched call (20 nodes): ~1,080 tokens, 1 API call
+        - Savings: 58% tokens, 95% fewer API calls!
+        
+        Args:
+            texts: List of texts to augment
+            batch_size: Number of texts per API call (default: 20, recommended: 10-20)
+        
+        Returns:
+            List of augmented texts (same length as input)
+        """
+        if not self.use_llm or not texts:
+            return texts
+        
+        augmented_results = []
+        
+        # Process texts in batches
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i+batch_size]
+            
+            # Filter out empty/short texts
+            valid_indices = [j for j, t in enumerate(batch_texts) if t and len(t) >= 5]
+            valid_texts = [batch_texts[j] for j in valid_indices]
+            
+            if not valid_texts:
+                # All texts invalid, keep originals
+                augmented_results.extend(batch_texts)
+                continue
+            
+            # Create batched prompt
+            batch_prompt = self._create_batch_prompt(valid_texts)
+            
+            # Call LLM once for entire batch
+            response = self._call_llm(batch_prompt)
+            
+            if response:
+                # Parse response into individual texts
+                parsed_texts = self._parse_batch_response(response, len(valid_texts))
+                
+                # Map back to original order
+                result_batch = []
+                valid_idx = 0
+                for j in range(len(batch_texts)):
+                    if j in valid_indices:
+                        # Use augmented text if parsing succeeded
+                        if valid_idx < len(parsed_texts) and parsed_texts[valid_idx]:
+                            result_batch.append(parsed_texts[valid_idx])
+                        else:
+                            result_batch.append(batch_texts[j])  # Fallback to original
+                        valid_idx += 1
+                    else:
+                        result_batch.append(batch_texts[j])
+                
+                augmented_results.extend(result_batch)
+            else:
+                # API call failed, keep originals
+                augmented_results.extend(batch_texts)
+        
+        return augmented_results
+    
+    def _create_batch_prompt(self, texts: List[str]) -> str:
+        """
+        Create a batched prompt for multiple texts
+        
+        Args:
+            texts: List of texts to augment
+        
+        Returns:
+            Formatted prompt string
+        """
+        # Create numbered list of texts
+        text_list = "\n".join([f"{i+1}. \"{text}\"" for i, text in enumerate(texts)])
+        
+        prompt = f"""Paraphrase the following {len(texts)} social media posts while keeping the same meaning for each.
+Provide one paraphrased version per line, in the same order.
+
+Original posts:
+{text_list}
+
+Paraphrased versions (one per line, no numbering):"""
+        
+        return prompt
+    
+    def _parse_batch_response(self, response: str, expected_count: int) -> List[str]:
+        """
+        Parse batched LLM response into individual texts
+        
+        Args:
+            response: LLM response containing multiple paraphrased texts
+            expected_count: Expected number of texts
+        
+        Returns:
+            List of parsed texts
+        """
+        import re
+        
+        # Split by newlines and clean up
+        lines = [line.strip() for line in response.strip().split('\n') if line.strip()]
+        
+        # Remove numbering if present (e.g., "1.", "1)", etc.)
+        cleaned_lines = []
+        for line in lines:
+            # Remove leading numbers and punctuation
+            cleaned = re.sub(r'^\d+[\.\):\-]\s*', '', line)
+            # Remove quotes if present
+            cleaned = cleaned.strip('"\'')
+            if cleaned:
+                cleaned_lines.append(cleaned)
+        
+        # Return expected number of results (pad with empty if needed)
+        while len(cleaned_lines) < expected_count:
+            cleaned_lines.append("")
+        
+        return cleaned_lines[:expected_count]
+    
     def augment_graph_nodes(
         self,
         data: Data,
         selected_node_indices: np.ndarray,
-        node_texts: List[str] = None
+        node_texts: List[str] = None,
+        use_batching: bool = True,
+        batch_size: int = 20
     ) -> Data:
         """
         Augment selected nodes in a graph
@@ -341,6 +459,8 @@ Paraphrased version (one line only):"""
             data: Original PyG Data object
             selected_node_indices: Indices of nodes to augment
             node_texts: Original texts for each node (if available)
+            use_batching: If True, batch multiple nodes in single API calls (RECOMMENDED)
+            batch_size: Number of nodes per API call (default: 20, recommended: 10-20)
         
         Returns:
             Augmented Data object with x_aug field
@@ -351,18 +471,37 @@ Paraphrased version (one line only):"""
         if node_texts is None:
             node_texts = [f"Node {i} placeholder text" for i in range(num_nodes)]
         
-        # Augment selected nodes
-        augmented_texts = []
-        for i in range(num_nodes):
-            if i in selected_node_indices:
-                # Augment this node
-                original_text = node_texts[i]
-                augmented_text = self.augment_node_text(original_text)
-                augmented_texts.append(augmented_text)
-                self.stats['nodes_augmented'] += 1
-            else:
-                # Keep original
-                augmented_texts.append(node_texts[i])
+        # Augment selected nodes using BATCHED approach (token efficient!)
+        if use_batching and self.use_llm and len(selected_node_indices) > 0:
+            # Collect texts for selected nodes only
+            selected_texts = [node_texts[i] for i in selected_node_indices]
+            
+            # Batch augment selected texts (saves tokens!)
+            augmented_selected = self.augment_batch_texts(selected_texts, batch_size=batch_size)
+            
+            # Create final text list with augmented texts in correct positions
+            augmented_texts = []
+            selected_idx = 0
+            for i in range(num_nodes):
+                if i in selected_node_indices:
+                    augmented_texts.append(augmented_selected[selected_idx])
+                    selected_idx += 1
+                    self.stats['nodes_augmented'] += 1
+                else:
+                    augmented_texts.append(node_texts[i])
+        else:
+            # Fallback to individual augmentation (old method, less efficient)
+            augmented_texts = []
+            for i in range(num_nodes):
+                if i in selected_node_indices:
+                    # Augment this node individually
+                    original_text = node_texts[i]
+                    augmented_text = self.augment_node_text(original_text)
+                    augmented_texts.append(augmented_text)
+                    self.stats['nodes_augmented'] += 1
+                else:
+                    # Keep original
+                    augmented_texts.append(node_texts[i])
         
         # Encode all texts to embeddings
         embeddings = self.lm_encoder.encode(augmented_texts)
@@ -383,16 +522,18 @@ Paraphrased version (one line only):"""
         graph_list: List[Data],
         selected_nodes_list: List[np.ndarray],
         texts_list: List[List[str]] = None,
-        verbose: bool = True
+        verbose: bool = True,
+        batch_size: int = 20
     ) -> List[Data]:
         """
-        Augment a batch of graphs
+        Augment a batch of graphs with batched API calls
         
         Args:
             graph_list: List of PyG Data objects
             selected_nodes_list: List of selected node indices for each graph
             texts_list: List of node texts for each graph
             verbose: Show progress bar
+            batch_size: Number of nodes per API call (default: 20)
         
         Returns:
             List of augmented Data objects
@@ -401,12 +542,18 @@ Paraphrased version (one line only):"""
         
         iterator = tqdm(zip(graph_list, selected_nodes_list), 
                        total=len(graph_list),
-                       desc="Augmenting nodes",
+                       desc="Augmenting nodes (batched)",
                        disable=not verbose)
         
         for i, (data, selected_indices) in enumerate(iterator):
             node_texts = texts_list[i] if texts_list else None
-            data_aug = self.augment_graph_nodes(data, selected_indices, node_texts)
+            data_aug = self.augment_graph_nodes(
+                data, 
+                selected_indices, 
+                node_texts,
+                use_batching=True,
+                batch_size=batch_size
+            )
             augmented_graphs.append(data_aug)
         
         return augmented_graphs
