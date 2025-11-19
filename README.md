@@ -63,63 +63,57 @@ Raw Tweets
 
 ## 📦 Project Structure
 
-<details open>
-<summary><b>Click to expand/collapse project structure</b></summary>
+### 🎯 Core TAPE Modules (7 files)
+- `bert_feature_extractor.py` - Phase 1: BERT feature extraction
+- `node_selector.py` - Phase 2: DBSCAN node selection
+- `node_augmentor.py` - Phase 3: LLM+LM augmentation
+- `feature_fusion.py` - Phase 4a: Feature fusion strategies
+- `model_tape.py` - Phase 4b: TAPE GNN model (GCN/GAT)
+- `tape_pipeline.py` - End-to-end pipeline orchestrator
+- `prompts.py` - LLM prompt templates
 
-```
-RumorDetection_FYP/
-│
-├── 🎯 Core TAPE Modules (7 files)
-│   ├── bert_feature_extractor.py    # Phase 1: BERT feature extraction
-│   ├── node_selector.py             # Phase 2: DBSCAN node selection
-│   ├── node_augmentor.py            # Phase 3: LLM+LM augmentation
-│   ├── feature_fusion.py            # Phase 4a: Feature fusion strategies
-│   ├── model_tape.py                # Phase 4b: TAPE GNN model (GCN/GAT)
-│   ├── tape_pipeline.py             # End-to-end pipeline orchestrator
-│   └── prompts.py                   # LLM prompt templates
-│
-├── 🧪 Experiments & Testing (3 files)
-│   ├── compare_tape_vs_baseline.py  # Baseline vs TAPE comparison
-│   ├── compare_gnn_backbones.py     # GCN vs GAT backbone comparison
-│   └── test_gat.py                  # GAT implementation tests
-│
-├── 🔧 Infrastructure (3 files)
-│   ├── config.py                    # Project configuration
-│   ├── data_preprocessing.py        # Data preprocessing utilities
-│   └── rate_limiter.py              # API rate limiting for LLM calls
-│
-├── 📊 Utilities
-│   └── utils/
-│       ├── __init__.py              # Package initialization
-│       └── visualization.py         # Training & result visualization
-│
-├── 📚 Documentation
-│   ├── README.md                    # Main documentation (this file)
-│   ├── VISUALIZATION_GUIDE.md       # Visualization usage guide
-│   ├── GAT_IMPLEMENTATION.md        # GAT implementation details
-│   └── requirements.txt             # Python dependencies
-│
-├── 📁 Data Directories
-│   ├── data/
-│   │   ├── raw/                     # Raw datasets (Twitter15/16, Weibo)
-│   │   ├── processed/               # Preprocessed graph data (.pkl)
-│   │   └── llm_cache.pkl            # LLM response cache
-│   │
-│   ├── checkpoints/                 # Saved model checkpoints
-│   │   ├── Twitter15_tape_best.pt
-│   │   └── Twitter16_tape_best.pt
-│   │
-│   └── logs/                        # Training logs & visualizations
-│       ├── Twitter15/               # Twitter15 experiment logs
-│       └── Twitter16/               # Twitter16 experiment logs
-│
-└── 📖 docs/                         # Additional documentation
-    ├── README.md                    # Documentation archive info
-    ├── GAT_IMPLEMENTATION_SUMMARY.md
-    └── GAT_USAGE_GUIDE.md
-```
+### 🧪 Experiments & Testing (3 files)
+- `compare_tape_vs_baseline.py` - Baseline vs TAPE comparison
+- `compare_gnn_backbones.py` - GCN vs GAT backbone comparison
+- `test_gat.py` - GAT implementation tests
 
-### 📋 File Categories
+### 🔧 Infrastructure (3 files)
+- `config.py` - Project configuration
+- `data_preprocessing.py` - Data preprocessing utilities
+- `rate_limiter.py` - API rate limiting for LLM calls
+
+### 📊 Utilities
+- `utils/`
+  - `__init__.py` - Package initialization
+  - `visualization.py` - Training & result visualization
+
+### 📚 Documentation
+- `README.md` - Main documentation (this file)
+- `VISUALIZATION_GUIDE.md` - Visualization usage guide
+- `GAT_IMPLEMENTATION.md` - GAT implementation details
+- `requirements.txt` - Python dependencies
+
+### 📁 Data Directories
+- `data/`
+  - `raw/` - Raw datasets (Twitter15/16, Weibo)
+  - `processed/` - Preprocessed graph data (.pkl)
+  - `llm_cache.pkl` - LLM response cache
+- `checkpoints/` - Saved model checkpoints
+  - `Twitter15_tape_best.pt`
+  - `Twitter16_tape_best.pt`
+- `logs/` - Training logs & visualizations
+  - `Twitter15/` - Twitter15 experiment logs
+  - `Twitter16/` - Twitter16 experiment logs
+
+### 📖 Additional Documentation
+- `docs/`
+  - `README.md` - Documentation archive info
+  - `GAT_IMPLEMENTATION_SUMMARY.md`
+  - `GAT_USAGE_GUIDE.md`
+
+---
+
+### 📋 Quick Reference
 
 | Category | Files | Purpose |
 |----------|-------|---------|
@@ -127,8 +121,6 @@ RumorDetection_FYP/
 | **Experiments** | 3 files | Comparison scripts and testing |
 | **Infrastructure** | 3 files | Configuration and utilities |
 | **Documentation** | 4 files | User guides and technical docs |
-
-</details>
 
 # Phase 1: Extract BERT features
 extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
