@@ -53,7 +53,7 @@ class Config:
     GNN_BACKBONE = 'gcn'  # GNN backbone: 'gcn' or 'gat'
     HIDDEN_DIM = 32       # GNN hidden layer dimension
     NUM_GNN_LAYERS = 2    # Number of GNN layers
-    DROPOUT = 0.6         # Dropout rate
+    DROPOUT = 0.7         # Dropout rate (increased to reduce overfitting)
     GAT_HEADS = 4         # Number of attention heads for GAT
     
     # ========== XGBoost Adaptive Classifier Configuration ==========
@@ -71,11 +71,11 @@ class Config:
     # ========== Training Configuration ==========
     BATCH_SIZE = 32     # Batch size (can be larger with full data)
     LEARNING_RATE = 0.001
-    WEIGHT_DECAY = 5e-4
+    WEIGHT_DECAY = 1e-3  # L2 regularization (increased to reduce overfitting)
     NUM_EPOCHS = 100    # Maximum training epochs (full data needs more epochs)
     
     # Early stopping
-    PATIENCE = 8       # Early stopping patience
+    PATIENCE = 5       # Early stopping patience (reduced to stop sooner)
     
     # ========== Runtime Configuration ==========
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

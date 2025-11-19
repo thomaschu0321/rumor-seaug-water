@@ -58,6 +58,15 @@ class TAPEPipeline:
             gnn_backbone: GNN backbone type ('gcn' or 'gat')
         """
         self.config = config or Config()
+        
+        # Auto-disable augmentation if LLM is not enabled
+        # (augmentation without LLM would just re-encode text with a weaker model)
+        if enable_augmentation and not use_llm:
+            print("\n⚠️  WARNING: Augmentation enabled but LLM disabled!")
+            print("   Augmentation without LLM will degrade performance.")
+            print("   Auto-disabling augmentation. Use --use_llm to enable LLM.\n")
+            enable_augmentation = False
+        
         self.enable_augmentation = enable_augmentation
         self.node_selection_strategy = node_selection_strategy
         self.fusion_strategy = fusion_strategy
@@ -615,8 +624,18 @@ class TAPEPipeline:
             )
             
             # Save results summary
+            # Determine model description
+            if self.enable_augmentation and self.use_llm:
+                model_desc = "TAPE with LLM"
+            elif self.enable_augmentation:
+                model_desc = "TAPE without LLM (should not happen - auto-disabled)"
+            else:
+                model_desc = "Baseline (No Augmentation)"
+            
             config_info = {
+                'Model Type': model_desc,
                 'Enable Augmentation': self.enable_augmentation,
+                'Use LLM': self.use_llm,
                 'Node Strategy': self.node_selection_strategy,
                 'Fusion Strategy': self.fusion_strategy,
                 'Augmentation Ratio': self.augmentation_ratio,
