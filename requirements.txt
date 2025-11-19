@@ -1,4 +1,4 @@
-# PyTorch和PyTorch Geometric
+# PyTorch and PyTorch Geometric
 torch>=1.10.0
 torch-geometric>=2.0.3
 
