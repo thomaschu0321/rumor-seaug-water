@@ -4,125 +4,117 @@
 
 SeAug (Selective LLM Augmentation Pipeline) implements a 4-stage node-level augmentation pipeline for rumor detection on social media:
 
-**Phase 1**: BERT extracts 768-dim semantic features (replacing TF-IDF)  
-**Phase 2**: DBSCAN identifies semantic outlier nodes (unsupervised)  
-**Phase 3**: LLM+LM selectively augments key nodes  
-**Phase 4**: Feature fusion + GNN classification
+- **Phase 1**: BERT extracts 768-dim semantic features (replacing TF-IDF)
+- **Phase 2**: DBSCAN identifies semantic outlier nodes (unsupervised)
+- **Phase 3**: LLM+LM selectively augments key nodes
+- **Phase 4**: Feature fusion + GNN classification
 
-python3 -m venv venv
-cd /Users/nerwen/Downloads/RumorDetection_FYP && source venv/bin/activate
-pip install --upgrade pip
+### Why This Works
 
-### Installation
+**Assumption**: Semantic outlier tweets (sarcasm, misinformation injection) are crucial for graph classification. By selectively augmenting these nodes, we enhance the model's ability to distinguish between rumor and non-rumor propagation patterns.
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Python 3.8+
+- CUDA-capable GPU (recommended for faster training)
+
+### Setup
 
 ```bash
-# 1. Install dependencies
+# 1. Create virtual environment (optional but recommended)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
-pip install transformers sentence-transformers torch-geometric  #for GNN
 
-# 2. Extract BERT features
-python bert_feature_extractor.py  #convert tweet into a 768-dimensional semantic vector. Results in data/processed/ directory.
-
-# 3. Run quick comparison (Baseline vs SeAug)
-python compare_seaug_vs_baseline.py --mode quick --sample_ratio 0.05
+# 3. Install additional dependencies for GNN
+pip install transformers sentence-transformers torch-geometric
 ```
 
+---
+
+## Quick Start
+
+### Run Experiments
+
+The easiest way to get started is using the experiment runner:
+
+```bash
+# Run all 4 configurations (GAT/GCN baseline + SeAug)
+python run_experiments.py --dataset Twitter15
+
+# Run with sampling for quick testing
+python run_experiments.py --dataset Twitter15 --sample_ratio 0.1
+```
+
+### Run Individual Pipeline
+
+```bash
+# Run SeAug pipeline with default settings
+python seaug_pipeline.py --dataset Twitter15 --enable_augmentation
+
+# Run with custom configuration
+python seaug_pipeline.py \
+    --dataset Twitter15 \
+    --gnn_backbone gat \
+    --enable_augmentation \
+    --node_strategy uncertainty \
+    --fusion_strategy concat \
+    --sample_ratio 1.0
+```
 
 ### Test Individual Modules
 
 ```bash
-python bert_feature_extractor.py   # Test Phase 1
-python node_selector.py            # Test Phase 2  
-python node_augmentor.py           # Test Phase 3
-python feature_fusion.py           # Test Phase 4a
-python model_seaug.py              # Test Phase 4b
-python seaug_pipeline.py 
+# Test Phase 1: BERT feature extraction
+python bert_feature_extractor.py
+
+# Test Phase 2: Node selection
+python node_selector.py
+
+# Test Phase 3: Node augmentation
+python node_augmentor.py
+
+# Test Phase 4a: Feature fusion
+python feature_fusion.py
+
+# Test Phase 4b: Model architecture
+python model_seaug.py
 ```
 
 ---
 
 ## Architecture
 
+```
 Raw Tweets
-    
+    ↓
 [Phase 1] BERT Feature Extraction
     → X_initial: 768-dim BERT features per node
-    
+    ↓
 [Phase 2] DBSCAN Node Selection (Unsupervised)
     → Outlier nodes (label = -1)
-    
+    ↓
 [Phase 3] LLM + LM Encoding
     → Augmented features: 384-dim per selected node
-
+    ↓
 [Phase 4] Feature Fusion + GNN
     → Fused features (768 + 384 = 1152-dim) → Classification
 ```
 
-### Why This Works
+### Usage Example
 
-**Assumption**: Semantic outlier tweets (sarcasm, misinformation injection) are crucial for graph classification.
-
-
-## Project Structure
-
-### Core SeAug Modules (7 files)
-- `bert_feature_extractor.py` - Phase 1: BERT feature extraction
-- `node_selector.py` - Phase 2: DBSCAN node selection
-- `node_augmentor.py` - Phase 3: LLM+LM augmentation
-- `feature_fusion.py` - Phase 4a: Feature fusion strategies
-- `model_seaug.py` - Phase 4b: SeAug GNN model (GCN/GAT)
-- `seaug_pipeline.py` - End-to-end pipeline orchestrator
-- `prompts.py` - LLM prompt templates
-
-### Experiments & Testing (3 files)
-- `compare_seaug_vs_baseline.py` - Baseline vs SeAug comparison
-- `compare_gnn_backbones.py` - GCN vs GAT backbone comparison
-- `test_gat.py` - GAT implementation tests
-
-### Infrastructure (3 files)
-- `config.py` - Project configuration
-- `data_preprocessing.py` - Data preprocessing utilities
-- `rate_limiter.py` - API rate limiting for LLM calls
-
-### Utilities
-- `utils/`
-  - `__init__.py` - Package initialization
-  - `visualization.py` - Training & result visualization
-
-### Documentation
-- `README.md` - Main documentation (this file)
-- `VISUALIZATION_GUIDE.md` - Visualization usage guide
-- `GAT_IMPLEMENTATION.md` - GAT implementation details
-- `requirements.txt` - Python dependencies
-
-### Data Directories
-- `data/`
-  - `raw/` - Raw datasets (Twitter15/16, Weibo)
-  - `processed/` - Preprocessed graph data (.pkl)
-  - `llm_cache.pkl` - LLM response cache
-- `checkpoints/` - Saved model checkpoints
-  - `Twitter15_seaug_best.pt`
-  - `Twitter16_seaug_best.pt`
-- `logs/` - Training logs & visualizations
-  - `Twitter15/` - Twitter15 experiment logs
-  - `Twitter16/` - Twitter16 experiment logs
-
-### Additional Documentation
-- `docs/`
-  - `README.md` - Documentation archive info
-  - `GAT_IMPLEMENTATION_SUMMARY.md`
-  - `GAT_USAGE_GUIDE.md`
-
----
-
-### Quick Reference
-
-| Category | Files | Purpose |
-|----------|-------|---------|
-| **Core Modules** | 7 files | SeAug framework implementation (Phases 1-4) |
-| **Experiments** | 3 files | Comparison scripts and testing |
-| **Infrastructure** | 3 files | Configuration and utilities |
-| **Documentation** | 4 files | User guides and technical docs |
+```python
+from bert_feature_extractor import BERTFeatureExtractor
+from node_selector import NodeSelector
+from node_augmentor import NodeAugmentor
+from model_seaug import get_seaug_model
 
 # Phase 1: Extract BERT features
 extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
@@ -134,13 +126,55 @@ selector.fit(bert_graphs)
 outlier_indices = [selector.select_nodes(g) for g in bert_graphs]
 
 # Phase 3: Augment outlier nodes
-augmentor = NodeAugmentor(use_llm=False)
+augmentor = NodeAugmentor()
 augmented_graphs = augmentor.augment_batch(bert_graphs, outlier_indices)
 
 # Phase 4: GNN classification
-model = SeAugRumorGCN(baseline_dim=768, augmented_dim=384)
+model = get_seaug_model(
+    model_type="seaug",
+    gnn_backbone="gcn",
+    baseline_dim=768,
+    augmented_dim=384
+)
 output = model(augmented_graphs)
 ```
+
+---
+
+## Project Structure
+
+### Core SeAug Modules
+
+- `seaug_pipeline.py` - End-to-end pipeline orchestrator
+- `bert_feature_extractor.py` - Phase 1: BERT feature extraction
+- `node_selector.py` - Phase 2: DBSCAN node selection
+- `node_augmentor.py` - Phase 3: LLM+LM augmentation
+- `feature_fusion.py` - Phase 4a: Feature fusion strategies
+- `model_seaug.py` - Phase 4b: SeAug GNN model (GCN/GAT)
+
+### Infrastructure
+
+- `config.py` - Project configuration
+- `data_preprocessing.py` - Data preprocessing utilities
+- `rate_limiter.py` - API rate limiting for LLM calls
+- `run_experiments.py` - Experiment runner for multiple configurations
+
+### Utilities
+
+- `utils/`
+  - `__init__.py` - Package initialization
+  - `visualization.py` - Training & result visualization
+
+### Data Directories
+
+- `data/`
+  - `raw_text/` - Raw tweet/Weibo text files
+  - `processed/` - Preprocessed graph data (.pkl files)
+  - `llm_cache.pkl` - LLM response cache (auto-generated)
+- `logs/` - Training logs & visualizations
+  - `Twitter15/` - Twitter15 experiment logs
+  - `Twitter16/` - Twitter16 experiment logs
+- `checkpoints/` - Saved model checkpoints (auto-generated)
 
 ---
 
@@ -184,8 +218,11 @@ NUM_EPOCHS = 50
 # Sampling (for quick testing)
 --sample_ratio 0.05           # Use 5% of data
 
-# Enable augmentation
+# Enable (LLM-powered) augmentation
 --enable_augmentation
+
+# GNN backbone selection
+--gnn_backbone gcn|gat
 
 # Node selection strategy
 --node_strategy uncertainty|importance|hybrid
@@ -196,8 +233,6 @@ NUM_EPOCHS = 50
 # Augmentation ratio
 --augmentation_ratio 0.3      # Augment 30% of nodes per graph
 
-# Use LLM (requires API key)
---use_llm
 ```
 
 ---
@@ -218,8 +253,20 @@ NUM_EPOCHS = 50
 - **Graph structure**: Propagation tree (edge_index)
 - **Labels**: Graph-level classification
 
----
+### Data Setup
 
+The framework expects data in the BiGCN project format. Ensure your data directory structure matches:
+
+```
+data/
+  raw_text/
+    Twitter15_source_tweets.txt
+    Twitter16_source_tweets.txt
+    Weibo/
+      *.json files
+```
+
+---
 
 ## Technical Background
 
@@ -233,3 +280,36 @@ The SeAug framework combines several key techniques:
 ### Design Rationale
 
 The framework supports both GCN and GAT backbones to demonstrate that the performance improvements come from selective augmentation rather than a specific GNN architecture. This design validates the generalizability of the approach across different neural network architectures.
+
+---
+
+## Results
+
+Training results and visualizations are automatically saved to the `logs/` directory, including:
+
+- Training history plots
+- Confusion matrices
+- Prediction analysis
+- Results summary (accuracy, F1-score, etc.)
+
+Each experiment run creates a timestamped subdirectory with all outputs.
+
+---
+
+## License
+
+This project is part of a Final Year Project (FYP) for rumor detection research.
+
+---
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@misc{seaug2024,
+  title={SeAug: Selective LLM Augmentation for Rumor Detection},
+  author={Your Name},
+  year={2024}
+}
+```

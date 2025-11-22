@@ -14,12 +14,11 @@ Usage:
 """
 
 import os
+import csv
 import argparse
 import numpy as np
 import torch
-from datetime import datetime
 from tqdm import tqdm
-import pickle
 
 from config import Config
 from data_preprocessing import TwitterDataProcessor, WeiboDataProcessor, split_data
@@ -27,7 +26,6 @@ from node_selector import NodeSelector
 from node_augmentor import LanguageModelEncoder, NodeAugmentor
 from model_seaug import get_seaug_model
 from torch_geometric.loader import DataLoader
-# Note: utils module not needed - functions not used in this script
 
 
 class SeAugPipeline:
@@ -42,7 +40,6 @@ class SeAugPipeline:
         node_selection_strategy: str = "hybrid",
         fusion_strategy: str = "concat",
         augmentation_ratio: float = 0.3,
-        use_llm: bool = False,
         gnn_backbone: str = "gcn",
         batch_size: int = 20
     ):
@@ -55,25 +52,15 @@ class SeAugPipeline:
             node_selection_strategy: Strategy for selecting nodes
             fusion_strategy: Strategy for feature fusion
             augmentation_ratio: Ratio of nodes to augment per graph
-            use_llm: Whether to use LLM for augmentation
             gnn_backbone: GNN backbone type ('gcn' or 'gat')
             batch_size: Number of nodes per API call for batched processing (default: 20)
         """
         self.config = config or Config()
         
-        # Auto-disable augmentation if LLM is not enabled
-        # (augmentation without LLM would just re-encode text with a weaker model)
-        if enable_augmentation and not use_llm:
-            print("\nWARNING: Augmentation enabled but LLM disabled!")
-            print("Augmentation without LLM will degrade performance.")
-            print("Auto-disabling augmentation. Use --use_llm to enable LLM.\n")
-            enable_augmentation = False
-        
         self.enable_augmentation = enable_augmentation
         self.node_selection_strategy = node_selection_strategy
         self.fusion_strategy = fusion_strategy
         self.augmentation_ratio = augmentation_ratio
-        self.use_llm = use_llm
         self.gnn_backbone = gnn_backbone
         self.batch_size = batch_size
         
@@ -99,8 +86,8 @@ class SeAugPipeline:
         print(f"  Node selection strategy: {node_selection_strategy}")
         print(f"  Fusion strategy: {fusion_strategy}")
         print(f"  Augmentation ratio: {augmentation_ratio}")
-        print(f"  Use LLM: {use_llm}")
-        if enable_augmentation and use_llm:
+        print(f"  LLM augmentation: {enable_augmentation}")
+        if enable_augmentation:
             print(f"  Batch size: {batch_size} nodes/call (Token optimized!)")
         print("="*70)
     
@@ -131,7 +118,6 @@ class SeAugPipeline:
             
             self.node_augmentor = NodeAugmentor(
                 lm_encoder=self.lm_encoder,
-                use_llm=self.use_llm
             )
             print("LM Encoder and Augmentor initialized")
         
@@ -156,30 +142,25 @@ class SeAugPipeline:
         print("[Stage 1] Initial Feature Extraction")
         print("="*70)
         
-        # Choose processor
-        use_bert = getattr(self.config, 'USE_BERT_FEATURES', False)
-        
+        # Choose processor (always uses BERT)
         if dataset_name == 'Weibo':
             processor = WeiboDataProcessor(
                 dataname=dataset_name,
                 feature_dim=self.config.FEATURE_DIM,
-                sample_ratio=sample_ratio,
-                use_bert=use_bert
+                sample_ratio=sample_ratio
             )
         else:
             processor = TwitterDataProcessor(
                 dataname=dataset_name,
                 feature_dim=self.config.FEATURE_DIM,
-                sample_ratio=sample_ratio,
-                use_bert=use_bert
+                sample_ratio=sample_ratio
             )
         
-        # Load processed data
-        feature_type = "bert" if use_bert else "tfidf"
+        # Load processed data (always BERT)
         if sample_ratio == 1.0:
-            processed_filename = f'{dataset_name}_processed_{feature_type}_full.pkl'
+            processed_filename = f'{dataset_name}_processed_bert_full.pkl'
         else:
-            processed_filename = f'{dataset_name}_processed_{feature_type}_sample{sample_ratio}.pkl'
+            processed_filename = f'{dataset_name}_processed_bert_sample{sample_ratio}.pkl'
         
         processed_path = os.path.join(self.config.PROCESSED_DIR, processed_filename)
         
@@ -243,7 +224,7 @@ class SeAugPipeline:
         if split_name == "train" and not self.node_selector.is_fitted:
             self.node_selector.fit(data_list)
         
-        selected_nodes_list = self.node_selector.select_batch(data_list)
+        selected_nodes_list = [self.node_selector.select_nodes(data) for data in data_list]
         
         total_selected = sum(len(nodes) for nodes in selected_nodes_list)
         total_nodes = sum(data.x.shape[0] for data in data_list)
@@ -571,7 +552,7 @@ class SeAugPipeline:
         # Stage 4: Train model
         results = self.train_model(train_list, val_list, test_list, dataset_name)
         
-        # Print final results
+        # Print final results to stdout (no file logging / visualizations)
         print("\n" + "="*70)
         print("SeAug Pipeline Completed!")
         print("="*70)
@@ -589,79 +570,61 @@ class SeAugPipeline:
                   f"({self.stats['augmented_nodes']/self.stats['total_nodes']*100:.1f}%)")
             print(f"  Augmentation time: {self.stats['augmentation_time']:.2f}s")
         
-        # Generate visualizations
-        if results.get('test_predictions') is not None:
-            print("\n" + "="*70)
-            print("Generating Visualizations...")
-            print("="*70)
-            
-            from utils.visualization import (
-                plot_training_history,
-                plot_confusion_matrix,
-                plot_prediction_analysis,
-                save_results_summary,
-                create_log_directory
-            )
-            
-            # Create log directory
-            log_dir, timestamp = create_log_directory(self.config.LOG_DIR, dataset_name)
-            print(f"\nSaving results to: {log_dir}")
-            
-            # Plot training history
-            history_path = os.path.join(log_dir, f'training_history_{timestamp}.png')
-            plot_training_history(results['history'], history_path)
-            
-            # Plot confusion matrix
-            class_names = ['Non-rumor', 'Rumor']
-            cm_path = os.path.join(log_dir, f'confusion_matrix_{timestamp}.png')
-            plot_confusion_matrix(
-                results['test_predictions']['labels'],
-                results['test_predictions']['predictions'],
-                class_names,
-                cm_path
-            )
-            
-            # Plot prediction analysis
-            pred_path = os.path.join(log_dir, f'prediction_analysis_{timestamp}.png')
-            plot_prediction_analysis(
-                results['test_predictions']['labels'],
-                results['test_predictions']['predictions'],
-                results['test_predictions']['probabilities'],
-                pred_path
-            )
-            
-            # Save results summary
-            # Determine model description
-            if self.enable_augmentation and self.use_llm:
-                model_desc = "SeAug with LLM"
-            elif self.enable_augmentation:
-                model_desc = "SeAug without LLM (should not happen - auto-disabled)"
-            else:
-                model_desc = "Baseline (No Augmentation)"
-            
-            config_info = {
-                'Model Type': model_desc,
-                'Enable Augmentation': self.enable_augmentation,
-                'Use LLM': self.use_llm,
-                'Node Strategy': self.node_selection_strategy,
-                'Fusion Strategy': self.fusion_strategy,
-                'Augmentation Ratio': self.augmentation_ratio,
-                'GNN Backbone': self.gnn_backbone,
-                'Sample Ratio': sample_ratio,
-            }
-            
-            summary_path = os.path.join(log_dir, f'results_summary_{timestamp}.txt')
-            save_results_summary(
-                results['test_results'],
-                results['history'],
-                summary_path,
-                dataset_name,
-                config_info
-            )
-            
-            print("\nAll visualizations saved successfully")
-            print("="*70)
+        # Append a concise summary row to a CSV file for easy reporting.
+        csv_path = os.path.join(self.config.ROOT_DIR, "results_summary.csv")
+        file_exists = os.path.isfile(csv_path)
+        fieldnames = [
+            "dataset",
+            "model_type",
+            "enable_augmentation",
+            "node_strategy",
+            "fusion_strategy",
+            "augmentation_ratio",
+            "gnn_backbone",
+            "sample_ratio",
+            "total_graphs",
+            "total_nodes",
+            "augmented_nodes",
+            "augmentation_time",
+            "accuracy",
+            "precision",
+            "recall",
+            "f1",
+        ]
         
+        # Determine high-level model description
+        if self.enable_augmentation:
+            model_desc = "SeAug with LLM"
+        else:
+            model_desc = "Baseline (No Augmentation)"
+        
+        with open(csv_path, mode="a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(
+                {
+                    "dataset": dataset_name,
+                    "model_type": model_desc,
+                    "enable_augmentation": self.enable_augmentation,
+                    "node_strategy": self.node_selection_strategy,
+                    "fusion_strategy": self.fusion_strategy,
+                    "augmentation_ratio": self.augmentation_ratio,
+                    "gnn_backbone": self.gnn_backbone,
+                    "sample_ratio": sample_ratio,
+                    "total_graphs": self.stats["total_graphs"],
+                    "total_nodes": self.stats["total_nodes"],
+                    "augmented_nodes": self.stats["augmented_nodes"],
+                    "augmentation_time": round(self.stats["augmentation_time"], 2),
+                    "accuracy": results["test_results"]["accuracy"],
+                    "precision": results["test_results"]["precision"],
+                    "recall": results["test_results"]["recall"],
+                    "f1": results["test_results"]["f1"],
+                }
+            )
+        
+        # Results and history are returned so that external scripts / notebooks
+        # can decide how to present or store them (tables, plots, etc.).
         return results
 
 
@@ -690,8 +653,6 @@ def main():
                        help='Feature fusion strategy')
     parser.add_argument('--augmentation_ratio', type=float, default=0.3,
                        help='Ratio of nodes to augment per graph')
-    parser.add_argument('--use_llm', action='store_true',
-                       help='Use LLM for text augmentation')
     parser.add_argument('--gnn_backbone', type=str, default='gcn',
                        choices=['gcn', 'gat'],
                        help='GNN backbone type')
@@ -706,7 +667,6 @@ def main():
         node_selection_strategy=args.node_strategy,
         fusion_strategy=args.fusion_strategy,
         augmentation_ratio=args.augmentation_ratio,
-        use_llm=args.use_llm,
         gnn_backbone=args.gnn_backbone,
         batch_size=args.batch_size
     )

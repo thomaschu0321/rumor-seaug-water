@@ -33,6 +33,9 @@ env/
 # Data
 data/processed/*.pkl
 data/raw/
+data/Twitter/
+data/Weibo/
+data/archive/
 
 # Logs
 logs/*.png

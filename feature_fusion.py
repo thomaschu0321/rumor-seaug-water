@@ -36,8 +36,8 @@ class FeatureFusion(nn.Module):
         Initialize Feature Fusion
         
         Args:
-            baseline_dim: Dimension of baseline features (e.g., 1000 for TF-IDF)
-            augmented_dim: Dimension of augmented features (e.g., 384/768 for BERT)
+            baseline_dim: Dimension of baseline features (BERT: 768)
+            augmented_dim: Dimension of augmented features (e.g., 384/768 for LM embeddings)
             output_dim: Output dimension (if None, determined by strategy)
             strategy: Fusion strategy
                 - "concat": Simple concatenation
@@ -334,7 +334,7 @@ if __name__ == '__main__':
     # Test parameters
     batch_size = 32
     num_nodes = 10
-    baseline_dim = 1000
+    baseline_dim = 768  # BERT feature dimension
     augmented_dim = 384
     
     # Create dummy data
@@ -385,7 +385,7 @@ if __name__ == '__main__':
     
     # Create data with augmented features
     data = Data(
-        x=torch.randn(10, 1000),
+        x=torch.randn(10, 768),  # BERT feature dimension
         x_aug=torch.randn(10, 384),
         edge_index=torch.tensor([[0, 1, 2, 3], [1, 2, 3, 4]], dtype=torch.long),
         y=torch.tensor([1]),

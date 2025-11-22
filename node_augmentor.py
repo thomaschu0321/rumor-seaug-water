@@ -12,6 +12,7 @@ Pipeline:
 """
 
 import os
+import time
 import numpy as np
 import torch
 from torch_geometric.data import Data
@@ -23,13 +24,8 @@ warnings.filterwarnings('ignore')
 from config import Config
 from rate_limiter import RateLimiter
 
-# Optional: Import transformers for LM encoding
-try:
-    from transformers import AutoTokenizer, AutoModel
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    TRANSFORMERS_AVAILABLE = False
-    print("⚠️  Warning: transformers not installed. LM encoding will use fallback.")
+# Import transformers for LM encoding (required)
+from transformers import AutoTokenizer, AutoModel
 
 # Import LLM client
 try:
@@ -60,41 +56,26 @@ class LanguageModelEncoder:
                 - "roberta-base": RoBERTa, 768-dim
             device: Device to use ('cuda' or 'cpu')
         """
-        if not TRANSFORMERS_AVAILABLE:
-            print("⚠️  Transformers not available. Using dummy encoder.")
-            self.model = None
-            self.tokenizer = None
-            self.embedding_dim = 384
-            return
-        
         self.model_name = model_name
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         
         print(f"Loading Language Model: {model_name}...")
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModel.from_pretrained(model_name)
-            self.model.to(self.device)
-            self.model.eval()
-            
-            # Get embedding dimension
-            with torch.no_grad():
-                dummy_input = self.tokenizer("test", return_tensors="pt", 
-                                            padding=True, truncation=True)
-                dummy_input = {k: v.to(self.device) for k, v in dummy_input.items()}
-                dummy_output = self.model(**dummy_input)
-                self.embedding_dim = dummy_output.last_hidden_state.shape[-1]
-            
-            print(f"✓ Language Model loaded successfully")
-            print(f"  Device: {self.device}")
-            print(f"  Embedding dimension: {self.embedding_dim}")
-            
-        except Exception as e:
-            print(f"⚠️  Error loading model: {e}")
-            print("  Using dummy encoder instead.")
-            self.model = None
-            self.tokenizer = None
-            self.embedding_dim = 384
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
+        self.model.to(self.device)
+        self.model.eval()
+        
+        # Get embedding dimension
+        with torch.no_grad():
+            dummy_input = self.tokenizer("test", return_tensors="pt", 
+                                        padding=True, truncation=True)
+            dummy_input = {k: v.to(self.device) for k, v in dummy_input.items()}
+            dummy_output = self.model(**dummy_input)
+            self.embedding_dim = dummy_output.last_hidden_state.shape[-1]
+        
+        print(f"✓ Language Model loaded successfully")
+        print(f"  Device: {self.device}")
+        print(f"  Embedding dimension: {self.embedding_dim}")
     
     def encode(
         self,
@@ -111,10 +92,6 @@ class LanguageModelEncoder:
         Returns:
             embeddings: numpy array [num_texts, embedding_dim]
         """
-        if self.model is None or self.tokenizer is None:
-            # Fallback: return random embeddings (for testing)
-            return np.random.randn(len(texts), self.embedding_dim).astype(np.float32)
-        
         embeddings = []
         
         # Process in batches
@@ -588,7 +565,7 @@ if __name__ == '__main__':
     augmentor = NodeAugmentor(lm_encoder=encoder, use_llm=False)  # Disable LLM for testing
     
     # Create dummy graph
-    x = torch.randn(5, 1000)
+    x = torch.randn(5, 768)  # BERT feature dimension
     edge_index = torch.tensor([[0, 0, 1, 2], [1, 2, 3, 4]], dtype=torch.long)
     data = Data(x=x, edge_index=edge_index, y=torch.tensor([1]))
     

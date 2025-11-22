@@ -16,36 +16,13 @@ class Node_tweet:
     def __init__(self, idx=None):
         self.children = []
         self.idx = idx
-        self.word = []
-        self.index = []
         self.parent = None
-
-
-def str2matrix(vec_str, max_features=5000):
-    """
-    Convert string format word frequency to list
-    vec_str format: "index1:freq1 index2:freq2 ..."
-    """
-    wordFreq, wordIndex = [], []
-    for pair in vec_str.split(' '):
-        if ':' not in pair:
-            continue
-        try:
-            index, freq = pair.split(':')
-            index = int(index)
-            freq = float(freq)
-            if index <= max_features:
-                wordIndex.append(index - 1)  # Convert to 0-based index
-                wordFreq.append(freq)
-        except:
-            continue
-    return wordFreq, wordIndex
 
 
 def construct_tree(tree_dict):
     """
     Build tree structure and extract graph adjacency relationships
-    Returns: edge_index, node_features, root_index
+    Returns: edge_index, num_nodes, root_index
     """
     # Create nodes
     index2node = {}
@@ -60,11 +37,6 @@ def construct_tree(tree_dict):
         indexP = tree_dict[j]['parent']
         nodeC = index2node[indexC]
         
-        # Extract word frequency features
-        wordFreq, wordIndex = str2matrix(tree_dict[j]['vec'])
-        nodeC.index = wordIndex
-        nodeC.word = wordFreq
-        
         # Not root node
         if indexP != 'None':
             nodeP = index2node[int(indexP)]
@@ -76,7 +48,6 @@ def construct_tree(tree_dict):
     
     # Build adjacency matrix (edge_index format)
     edge_index = [[], []]
-    node_features = []
     
     num_nodes = len(index2node)
     for i in range(num_nodes):
@@ -86,69 +57,44 @@ def construct_tree(tree_dict):
         for child in node.children:
             edge_index[0].append(i)  # Source node
             edge_index[1].append(child.idx - 1)  # Target node
-        
-        # Collect node features
-        node_features.append((node.word, node.index))
     
-    return edge_index, node_features, root_index
+    return edge_index, num_nodes, root_index
 
 
-def features_to_matrix(node_features, feature_dim=1000):
-    """
-    Convert node features to matrix
-    node_features: [(word_list, index_list), ...]
-    """
-    num_nodes = len(node_features)
-    x = np.zeros([num_nodes, feature_dim])
-    
-    for i, (words, indices) in enumerate(node_features):
-        for idx, word in zip(indices, words):
-            if idx < feature_dim:
-                x[i, idx] = word
-    
-    return x
 
 
 class TwitterDataProcessor:
     """Twitter data processor"""
     
-    def __init__(self, dataname='Twitter15', feature_dim=1000, sample_ratio=1.0, use_bert=False):
+    def __init__(self, dataname='Twitter15', feature_dim=768, sample_ratio=1.0):
         """
         dataname: 'Twitter15' or 'Twitter16'
-        feature_dim: Feature dimension (1000 for TF-IDF, 768 for BERT)
+        feature_dim: Feature dimension (768 for BERT)
         sample_ratio: Sampling ratio (1.0 means use all data)
-        use_bert: Whether to use BERT features (True) or word frequency features (False)
         """
         self.dataname = dataname
         self.feature_dim = feature_dim
         self.sample_ratio = sample_ratio
-        self.use_bert = use_bert
-        self.bert_extractor = None
         
-        # Use original BiGCN project data path
-        self.data_path = os.path.join(Config.BIGCN_DATA_DIR, dataname)
+        # Use new path structure: data/Twitter/{dataname}/
+        self.data_path = os.path.join(Config.DATA_DIR, 'Twitter', dataname)
         
         # Check if path exists
         if not os.path.exists(self.data_path):
             raise FileNotFoundError(
                 f"Data path does not exist: {self.data_path}\n"
-                f"Please ensure BiGCN-master project is in correct location"
+                f"Please ensure Twitter data is in correct location"
             )
         
-        # Initialize BERT extractor if needed
-        if self.use_bert:
-            try:
-                from bert_feature_extractor import BERTFeatureExtractor
-                print(f"Initializing BERT feature extractor...")
-                self.bert_extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
-            except Exception as e:
-                print(f"⚠️  Failed to initialize BERT: {e}")
-                print(f"   Falling back to word frequency features")
-                self.use_bert = False
+        # Initialize BERT extractor (always required)
+        from bert_feature_extractor import BERTFeatureExtractor
+        print(f"Initializing BERT feature extractor...")
+        self.bert_extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
     
     def load_texts(self):
         """Load original tweet texts (needed for BERT)"""
-        text_file = os.path.join(Config.DATA_DIR, 'raw_text', f'{self.dataname}_source_tweets.txt')
+        # Use new path structure: data/Twitter/{dataname}/{dataname}_source_tweets.txt
+        text_file = os.path.join(self.data_path, f'{self.dataname}_source_tweets.txt')
         
         if not os.path.exists(text_file):
             print(f"⚠️  Text file not found: {text_file}")
@@ -228,27 +174,23 @@ class TwitterDataProcessor:
     def process_data(self):
         """Process data and convert to PyG graph objects"""
         print(f"\n{'='*70}")
-        print(f"Processing {self.dataname} with {'BERT (768-dim)' if self.use_bert else 'Word Frequency (1000-dim)'} features")
+        print(f"Processing {self.dataname} with BERT (768-dim) features")
         print(f"{'='*70}")
         
         treeDic, labelDic = self.load_raw_data()
         
-        # Load texts if using BERT
-        texts_dict = {}
-        if self.use_bert:
-            texts_dict = self.load_texts()
-            if not texts_dict:
-                print(f"⚠️  No texts loaded, falling back to word frequency features")
-                self.use_bert = False
+        # Load texts (required for BERT)
+        texts_dict = self.load_texts()
+        if not texts_dict:
+            raise ValueError(
+                f"No texts loaded for BERT feature extraction. "
+                f"Expected text file at: {os.path.join(self.data_path, f'{self.dataname}_source_tweets.txt')}"
+            )
         
-        # Get valid event IDs
-        if self.use_bert:
-            valid_eids = [eid for eid in labelDic.keys() 
-                         if eid in treeDic and eid in texts_dict]
-            print(f"Valid samples (with text, tree, and label): {len(valid_eids)}")
-        else:
-            valid_eids = [eid for eid in labelDic.keys() if eid in treeDic]
-            print(f"Valid samples (have both tree and label): {len(valid_eids)}")
+        # Get valid event IDs (must have text, tree, and label)
+        valid_eids = [eid for eid in labelDic.keys() 
+                     if eid in treeDic and eid in texts_dict]
+        print(f"Valid samples (with text, tree, and label): {len(valid_eids)}")
         
         # Sampling (if needed)
         if self.sample_ratio < 1.0:
@@ -263,8 +205,7 @@ class TwitterDataProcessor:
         graph_list = []
         skipped = 0
         
-        desc = "Extracting BERT features" if self.use_bert else "Processing graph data"
-        for eid in tqdm(valid_eids, desc=desc):
+        for eid in tqdm(valid_eids, desc="Extracting BERT features"):
             try:
                 tree = treeDic[eid]
                 label = labelDic[eid]
@@ -275,20 +216,14 @@ class TwitterDataProcessor:
                     continue
                 
                 # Build graph
-                edge_index, node_features, root_index = construct_tree(tree)
-                num_nodes = len(node_features)
+                edge_index, num_nodes, root_index = construct_tree(tree)
                 
-                # Extract features based on method
-                if self.use_bert:
-                    # Use BERT features (768-dim)
-                    root_text = texts_dict[eid]
-                    # Simplified: use root tweet text for all nodes
-                    # TODO: In future, extract text for each node individually
-                    texts = [root_text] * num_nodes
-                    x = self.bert_extractor.extract_batch(texts)
-                else:
-                    # Use word frequency features (1000-dim)
-                    x = features_to_matrix(node_features, self.feature_dim)
+                # Extract BERT features (768-dim)
+                root_text = texts_dict[eid]
+                # Simplified: use root tweet text for all nodes
+                # TODO: In future, extract text for each node individually
+                texts = [root_text] * num_nodes
+                x = self.bert_extractor.extract_batch(texts)
                 
                 # Create PyG Data object
                 data = Data(
@@ -325,12 +260,11 @@ class TwitterDataProcessor:
         
         os.makedirs(save_path, exist_ok=True)
         
-        # Name based on feature type and sampling ratio
-        feature_type = "bert" if self.use_bert else "tfidf"
+        # Name based on sampling ratio (always BERT)
         if self.sample_ratio == 1.0:
-            filename = f'{self.dataname}_processed_{feature_type}_full.pkl'
+            filename = f'{self.dataname}_processed_bert_full.pkl'
         else:
-            filename = f'{self.dataname}_processed_{feature_type}_sample{self.sample_ratio}.pkl'
+            filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
         
         filepath = os.path.join(save_path, filename)
         
@@ -344,9 +278,9 @@ class TwitterDataProcessor:
         """Load processed data"""
         if load_path is None:
             if self.sample_ratio == 1.0:
-                filename = f'{self.dataname}_processed_full.pkl'
+                filename = f'{self.dataname}_processed_bert_full.pkl'
             else:
-                filename = f'{self.dataname}_processed_sample{self.sample_ratio}.pkl'
+                filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
             load_path = os.path.join(Config.PROCESSED_DIR, filename)
         
         if not os.path.exists(load_path):
@@ -366,18 +300,15 @@ class TwitterDataProcessor:
 class WeiboDataProcessor:
     """Weibo data processor"""
     
-    def __init__(self, dataname='Weibo', feature_dim=1000, sample_ratio=1.0, use_bert=False):
+    def __init__(self, dataname='Weibo', feature_dim=768, sample_ratio=1.0):
         """
         dataname: 'Weibo'
-        feature_dim: Feature dimension (1000 for TF-IDF, 768 for BERT)
+        feature_dim: Feature dimension (768 for BERT)
         sample_ratio: Sampling ratio (1.0 means use all data)
-        use_bert: Whether to use BERT features (currently not implemented for Weibo)
         """
         self.dataname = dataname
         self.feature_dim = feature_dim
         self.sample_ratio = sample_ratio
-        self.use_bert = use_bert  # Note: BERT not yet implemented for Weibo
-        self.bert_extractor = None
         
         # Use BiGCN project data path
         self.data_path = os.path.join(Config.BIGCN_DATA_DIR, dataname)
@@ -388,6 +319,31 @@ class WeiboDataProcessor:
                 f"Data path does not exist: {self.data_path}\n"
                 f"Please ensure data is in correct location"
             )
+        
+        # Initialize BERT extractor (always required)
+        from bert_feature_extractor import BERTFeatureExtractor
+        print(f"Initializing BERT feature extractor...")
+        self.bert_extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
+    
+    def load_texts(self):
+        """Load original Weibo texts (needed for BERT)"""
+        text_file = os.path.join(Config.DATA_DIR, 'raw_text', 'Weibo.txt')
+        
+        if not os.path.exists(text_file):
+            print(f"⚠️  Text file not found: {text_file}")
+            return {}
+        
+        texts_dict = {}
+        with open(text_file, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) >= 2:
+                    eid = parts[0]
+                    text = parts[1] if len(parts[1]) > 0 else "empty post"
+                    texts_dict[eid] = text
+        
+        print(f"✓ Loaded {len(texts_dict)} texts from {text_file}")
+        return texts_dict
     
     def load_raw_data(self):
         """Load raw Weibo data"""
@@ -482,18 +438,31 @@ class WeiboDataProcessor:
     
     def process_data(self):
         """Process data and convert to PyG graph objects"""
+        print(f"\n{'='*70}")
+        print(f"Processing {self.dataname} with BERT (768-dim) features")
+        print(f"{'='*70}")
+        
         treeDic, labelDic = self.load_raw_data()
         
-        # Get valid event IDs (have both tree and label)
-        valid_eids = [eid for eid in labelDic.keys() if eid in treeDic]
+        # Load texts (required for BERT)
+        texts_dict = self.load_texts()
+        if not texts_dict:
+            raise ValueError(
+                f"No texts loaded for BERT feature extraction. "
+                f"Expected text file at: {os.path.join(Config.DATA_DIR, 'raw_text', 'Weibo.txt')}"
+            )
         
-        print(f"\nValid samples (have both tree and label): {len(valid_eids)}")
+        # Get valid event IDs (must have text, tree, and label)
+        valid_eids = [eid for eid in labelDic.keys() 
+                     if eid in treeDic and eid in texts_dict]
+        
+        print(f"Valid samples (with text, tree, and label): {len(valid_eids)}")
         
         # Convert to graph objects
         graph_list = []
         skipped = 0
         
-        for eid in tqdm(valid_eids, desc="Processing Weibo graph data"):
+        for eid in tqdm(valid_eids, desc="Extracting BERT features"):
             try:
                 tree = treeDic[eid]
                 label = labelDic[eid]
@@ -504,17 +473,21 @@ class WeiboDataProcessor:
                     continue
                 
                 # Build graph
-                edge_index, node_features, root_index = construct_tree(tree)
+                edge_index, num_nodes, root_index = construct_tree(tree)
                 
-                # Convert features to matrix
-                x = features_to_matrix(node_features, self.feature_dim)
+                # Extract BERT features (768-dim)
+                root_text = texts_dict[eid]
+                # Simplified: use root post text for all nodes
+                # TODO: In future, extract text for each node individually
+                texts = [root_text] * num_nodes
+                x = self.bert_extractor.extract_batch(texts)
                 
                 # Create PyG Data object
                 data = Data(
                     x=torch.FloatTensor(x),
                     edge_index=torch.LongTensor(edge_index),
                     y=torch.LongTensor([label]),
-                    num_nodes=len(node_features),
+                    num_nodes=num_nodes,
                     eid=eid
                 )
                 
@@ -544,12 +517,11 @@ class WeiboDataProcessor:
         
         os.makedirs(save_path, exist_ok=True)
         
-        # Name based on feature type and sampling ratio
-        feature_type = "bert" if self.use_bert else "tfidf"
+        # Name based on sampling ratio (always BERT)
         if self.sample_ratio == 1.0:
-            filename = f'{self.dataname}_processed_{feature_type}_full.pkl'
+            filename = f'{self.dataname}_processed_bert_full.pkl'
         else:
-            filename = f'{self.dataname}_processed_{feature_type}_sample{self.sample_ratio}.pkl'
+            filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
         
         filepath = os.path.join(save_path, filename)
         
@@ -563,9 +535,9 @@ class WeiboDataProcessor:
         """Load processed data"""
         if load_path is None:
             if self.sample_ratio == 1.0:
-                filename = f'{self.dataname}_processed_full.pkl'
+                filename = f'{self.dataname}_processed_bert_full.pkl'
             else:
-                filename = f'{self.dataname}_processed_sample{self.sample_ratio}.pkl'
+                filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
             load_path = os.path.join(Config.PROCESSED_DIR, filename)
         
         if not os.path.exists(load_path):
@@ -607,34 +579,3 @@ def split_data(graph_list, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, see
     print(f"  Test set:  {len(test_list)} ({len(test_list)/len(graph_list)*100:.1f}%)")
     
     return train_list, val_list, test_list
-
-
-if __name__ == '__main__':
-    # Test data processing
-    print("="*60)
-    print("Data Preprocessing Test")
-    print("="*60)
-    
-    Config.create_dirs()
-    
-    processor = TwitterDataProcessor(
-        dataname='Twitter15',
-        feature_dim=1000,
-        sample_ratio=1.0  # Use all data
-    )
-    
-    # Process data
-    graph_list = processor.process_data()
-    
-    # Save data
-    processor.save_processed_data(graph_list)
-    
-    # Split data
-    train_list, val_list, test_list = split_data(graph_list)
-    
-    print("\nExample graph:")
-    print(train_list[0])
-    print(f"  Number of nodes: {train_list[0].num_nodes}")
-    print(f"  Number of edges: {train_list[0].edge_index.shape[1]}")
-    print(f"  Feature dimension: {train_list[0].x.shape}")
-    print(f"  Label: {train_list[0].y.item()}")

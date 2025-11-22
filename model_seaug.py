@@ -9,8 +9,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, GATConv, global_mean_pool
-from torch_geometric.data import Data
-from typing import Optional
 
 from feature_fusion import FeatureFusion
 
@@ -29,7 +27,7 @@ class SeAugRumorGNN(nn.Module):
     
     def __init__(
         self,
-        baseline_dim: int = 1000,
+        baseline_dim: int = 768,
         augmented_dim: int = 384,
         hidden_dim: int = 64,
         num_classes: int = 2,
@@ -44,7 +42,7 @@ class SeAugRumorGNN(nn.Module):
         Initialize SeAug GNN Model
         
         Args:
-            baseline_dim: Dimension of baseline features (TF-IDF)
+            baseline_dim: Dimension of baseline features (BERT: 768)
             augmented_dim: Dimension of augmented features (LM embeddings)
             hidden_dim: Hidden dimension for GNN layers
             num_classes: Number of output classes
@@ -164,8 +162,8 @@ class SeAugRumorGNN(nn.Module):
             # Use only baseline features
             x = data.x
         
-        # Step 2: GCN layers
-        for i, (conv, bn) in enumerate(zip(self.convs, self.bns)):
+        # Step 2: GNN layers (GCN or GAT)
+        for conv, bn in zip(self.convs, self.bns):
             x = conv(x, edge_index)
             x = bn(x)
             x = F.relu(x)
@@ -201,7 +199,7 @@ class SeAugRumorGNN(nn.Module):
         else:
             x = data.x
         
-        # GCN layers
+        # GNN layers (GCN or GAT)
         for conv, bn in zip(self.convs, self.bns):
             x = conv(x, edge_index)
             x = bn(x)
@@ -211,125 +209,12 @@ class SeAugRumorGNN(nn.Module):
         x = global_mean_pool(x, batch)
         
         return x
-    
-    def predict_with_confidence(self, data):
-        """
-        Predict with confidence scores
-        
-        Args:
-            data: PyG Data object
-        
-        Returns:
-            predictions: Predicted classes [batch_size]
-            confidences: Confidence scores [batch_size]
-        """
-        self.eval()
-        with torch.no_grad():
-            logits = self.forward(data)
-            probs = torch.exp(logits)
-            confidences, predictions = torch.max(probs, dim=1)
-        
-        return predictions, confidences
-
-
-class HybridSeAugGCN(nn.Module):
-    """
-    Hybrid model that can switch between baseline-only and fusion modes
-    
-    Useful for comparing performance with/without augmentation
-    """
-    
-    def __init__(
-        self,
-        baseline_dim: int = 1000,
-        augmented_dim: int = 384,
-        hidden_dim: int = 64,
-        num_classes: int = 2,
-        dropout: float = 0.3,
-        fusion_strategy: str = "concat"
-    ):
-        super(HybridSeAugGCN, self).__init__()
-        
-        # Baseline-only branch
-        self.baseline_branch = SeAugRumorGNN(
-            baseline_dim=baseline_dim,
-            augmented_dim=augmented_dim,
-            hidden_dim=hidden_dim,
-            num_classes=num_classes,
-            dropout=dropout,
-            use_fusion=False
-        )
-        
-        # Fusion branch
-        self.fusion_branch = SeAugRumorGNN(
-            baseline_dim=baseline_dim,
-            augmented_dim=augmented_dim,
-            hidden_dim=hidden_dim,
-            num_classes=num_classes,
-            dropout=dropout,
-            use_fusion=True,
-            fusion_strategy=fusion_strategy
-        )
-        
-        self.mode = "fusion"  # "baseline" or "fusion"
-    
-    def forward(self, data):
-        """Forward pass using current mode"""
-        if self.mode == "baseline":
-            return self.baseline_branch(data)
-        else:
-            return self.fusion_branch(data)
-    
-    def set_mode(self, mode: str):
-        """
-        Set prediction mode
-        
-        Args:
-            mode: "baseline" or "fusion"
-        """
-        if mode not in ["baseline", "fusion"]:
-            raise ValueError(f"Invalid mode: {mode}. Use 'baseline' or 'fusion'.")
-        self.mode = mode
-    
-    def compare_modes(self, data):
-        """
-        Compare predictions from both modes
-        
-        Args:
-            data: PyG Data object
-        
-        Returns:
-            dict with results from both modes
-        """
-        self.eval()
-        with torch.no_grad():
-            baseline_logits = self.baseline_branch(data)
-            fusion_logits = self.fusion_branch(data)
-            
-            baseline_probs = torch.exp(baseline_logits)
-            fusion_probs = torch.exp(fusion_logits)
-            
-            baseline_conf, baseline_pred = torch.max(baseline_probs, dim=1)
-            fusion_conf, fusion_pred = torch.max(fusion_probs, dim=1)
-        
-        return {
-            'baseline': {
-                'predictions': baseline_pred,
-                'confidences': baseline_conf,
-                'logits': baseline_logits
-            },
-            'fusion': {
-                'predictions': fusion_pred,
-                'confidences': fusion_conf,
-                'logits': fusion_logits
-            }
-        }
 
 
 def get_seaug_model(
     model_type: str = "seaug",
     gnn_backbone: str = "gcn",
-    baseline_dim: int = 1000,
+    baseline_dim: int = 768,
     augmented_dim: int = 384,
     hidden_dim: int = 64,
     num_classes: int = 2,
@@ -383,21 +268,3 @@ def get_seaug_model(
     
     else:
         raise ValueError(f"Unknown model type: {model_type}")
-
-
-# Backward compatibility: keep old names as aliases
-class SeAugRumorGCN(SeAugRumorGNN):
-    """
-    Backward compatibility wrapper for SeAugRumorGNN with GCN backbone
-    """
-    def __init__(self, **kwargs):
-        kwargs['gnn_backbone'] = 'gcn'
-        super().__init__(**kwargs)
-
-
-# Legacy TAPE names for backward compatibility
-TAPERumorGNN = SeAugRumorGNN
-TAPERumorGCN = SeAugRumorGCN
-HybridTAPEGCN = HybridSeAugGCN
-get_tape_model = get_seaug_model
-
