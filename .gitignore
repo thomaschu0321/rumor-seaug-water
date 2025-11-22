@@ -35,6 +35,10 @@ ENV/
 *.swp
 *.swo
 *~
+*.code-workspace
+
+# Binary files
+*.whl
 
 # OS
 .DS_Store
