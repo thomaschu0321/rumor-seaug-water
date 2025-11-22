@@ -22,7 +22,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from config import Config
-from rate_limiter import RateLimiter
 
 # Import transformers for LM encoding (required)
 from transformers import AutoTokenizer, AutoModel
@@ -176,13 +175,6 @@ class NodeAugmentor:
             'quota_exceeded': 0,
             'rate_limited': 0
         }
-        
-        # Rate limiter for API quota management
-        if self.use_llm:
-            self.rate_limiter = RateLimiter(
-                calls_per_minute=5,   # CUHK limit
-                calls_per_week=100    # CUHK limit
-            )
     
     def _init_llm_client(self, api_key: str = None, model: str = None):
         """Initialize LLM client - Azure OpenAI only"""
@@ -214,7 +206,7 @@ class NodeAugmentor:
             self.use_llm = False
     
     def _call_llm(self, prompt: str) -> str:
-        """Call LLM API with rate limiting"""
+        """Call LLM API"""
         if not self.use_llm:
             return None
         
@@ -223,13 +215,6 @@ class NodeAugmentor:
         if cache_key in self.cache:
             self.stats['cache_hits'] += 1
             return self.cache[cache_key]
-        
-        # Check rate limit and quota
-        can_proceed = self.rate_limiter.wait_if_needed()
-        if not can_proceed:
-            # Weekly quota exceeded
-            self.stats['quota_exceeded'] += 1
-            return None
         
         try:
             # Make API call
@@ -243,9 +228,6 @@ class NodeAugmentor:
                 temperature=self.temperature
             )
             text = response.choices[0].message.content.strip()
-            
-            # Record successful call
-            self.rate_limiter.record_call()
             
             # Cache result
             self.cache[cache_key] = text

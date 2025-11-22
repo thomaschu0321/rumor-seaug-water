@@ -38,7 +38,6 @@ Use this checklist to systematically review your code. Check off items as you co
 
 ### Phase 5: Node Augmentation (Phase 3)
 - [ ] Review `node_augmentor.py` - Augmentation logic
-- [ ] Review `rate_limiter.py` - API rate limiting
 - [ ] Check LLM API integration (Azure OpenAI)
 - [ ] Verify caching mechanism
 - [ ] Check fallback to LM when LLM disabled

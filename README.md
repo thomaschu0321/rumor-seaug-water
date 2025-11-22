@@ -158,13 +158,11 @@ output = model(augmented_graphs)
 
 - `config.py` - Project configuration
 - `data_preprocessing.py` - Data preprocessing utilities
-- `rate_limiter.py` - API rate limiting for LLM calls
 - `run_experiments.py` - Experiment runner for multiple configurations
 
 ### Utilities
 
 - `utils/`
-  - `__init__.py` - Package initialization
   - `visualization.py` - Training & result visualization
 
 ### Data Directories
