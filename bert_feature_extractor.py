@@ -93,7 +93,8 @@ class BERTFeatureExtractor:
         self,
         texts: List[str],
         batch_size: int = 32,
-        show_progress: bool = True
+        show_progress: bool = True,
+        progress_callback: callable = None
     ) -> np.ndarray:
         """
         Extract BERT features for a batch of texts
@@ -102,17 +103,19 @@ class BERTFeatureExtractor:
             texts: List of input texts
             batch_size: Batch size for processing
             show_progress: Show progress bar
+            progress_callback: Optional callback function(current, total) for progress updates
         
         Returns:
             Array of shape [num_texts, 768]
         """
         embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
         
         iterator = range(0, len(texts), batch_size)
         if show_progress:
-            iterator = tqdm(iterator, desc="Extracting BERT features")
+            iterator = tqdm(iterator, desc="Extracting BERT features", total=total_batches)
         
-        for i in iterator:
+        for batch_idx, i in enumerate(iterator):
             batch_texts = texts[i:i+batch_size]
             
             # Tokenize batch
@@ -131,6 +134,10 @@ class BERTFeatureExtractor:
                 cls_embeddings = outputs.last_hidden_state[:, 0, :]
             
             embeddings.append(cls_embeddings.cpu().numpy())
+            
+            # Call progress callback if provided
+            if progress_callback:
+                progress_callback(batch_idx + 1, total_batches)
         
         return np.vstack(embeddings)
 

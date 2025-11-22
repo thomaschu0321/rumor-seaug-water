@@ -205,7 +205,24 @@ class TwitterDataProcessor:
         graph_list = []
         skipped = 0
         
-        for eid in tqdm(valid_eids, desc="Extracting BERT features"):
+        # Progress tracking for BERT extraction
+        total_events = len(valid_eids)
+        last_notified = -1
+        
+        def check_progress(current_idx):
+            """Check if we should notify progress"""
+            nonlocal last_notified
+            if current_idx == 0 or current_idx == total_events - 1:
+                return True
+            # Check if we've crossed a milestone (every 10%)
+            milestones = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+            for milestone in milestones:
+                milestone_idx = int(total_events * milestone)
+                if last_notified < milestone_idx <= current_idx:
+                    return True
+            return False
+        
+        for idx, eid in enumerate(tqdm(valid_eids, desc="Extracting BERT features")):
             try:
                 tree = treeDic[eid]
                 label = labelDic[eid]
@@ -213,6 +230,10 @@ class TwitterDataProcessor:
                 # Check tree size
                 if len(tree) < 2:
                     skipped += 1
+                    if check_progress(idx):
+                        progress_pct = (idx + 1) / total_events * 100
+                        print(f"\n[BERT Progress] {progress_pct:.1f}% complete ({idx + 1}/{total_events} events processed)")
+                        last_notified = idx
                     continue
                 
                 # Build graph
@@ -223,7 +244,7 @@ class TwitterDataProcessor:
                 # Simplified: use root tweet text for all nodes
                 # TODO: In future, extract text for each node individually
                 texts = [root_text] * num_nodes
-                x = self.bert_extractor.extract_batch(texts)
+                x = self.bert_extractor.extract_batch(texts, show_progress=False)
                 
                 # Create PyG Data object
                 data = Data(
@@ -236,9 +257,19 @@ class TwitterDataProcessor:
                 
                 graph_list.append(data)
                 
+                # Check and notify progress
+                if check_progress(idx):
+                    progress_pct = (idx + 1) / total_events * 100
+                    print(f"\n[BERT Progress] {progress_pct:.1f}% complete ({idx + 1}/{total_events} events processed)")
+                    last_notified = idx
+                
             except Exception as e:
                 print(f"Error processing event {eid}: {e}")
                 skipped += 1
+                if check_progress(idx):
+                    progress_pct = (idx + 1) / total_events * 100
+                    print(f"\n[BERT Progress] {progress_pct:.1f}% complete ({idx + 1}/{total_events} events processed)")
+                    last_notified = idx
                 continue
         
         print(f"\n✓ Successfully processed: {len(graph_list)} graphs")
@@ -462,7 +493,24 @@ class WeiboDataProcessor:
         graph_list = []
         skipped = 0
         
-        for eid in tqdm(valid_eids, desc="Extracting BERT features"):
+        # Progress tracking for BERT extraction
+        total_events = len(valid_eids)
+        last_notified = -1
+        
+        def check_progress(current_idx):
+            """Check if we should notify progress"""
+            nonlocal last_notified
+            if current_idx == 0 or current_idx == total_events - 1:
+                return True
+            # Check if we've crossed a milestone (every 10%)
+            milestones = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+            for milestone in milestones:
+                milestone_idx = int(total_events * milestone)
+                if last_notified < milestone_idx <= current_idx:
+                    return True
+            return False
+        
+        for idx, eid in enumerate(tqdm(valid_eids, desc="Extracting BERT features")):
             try:
                 tree = treeDic[eid]
                 label = labelDic[eid]
@@ -470,6 +518,10 @@ class WeiboDataProcessor:
                 # Check tree size
                 if len(tree) < 2:
                     skipped += 1
+                    if check_progress(idx):
+                        progress_pct = (idx + 1) / total_events * 100
+                        print(f"\n[BERT Progress] {progress_pct:.1f}% complete ({idx + 1}/{total_events} events processed)")
+                        last_notified = idx
                     continue
                 
                 # Build graph
@@ -480,7 +532,7 @@ class WeiboDataProcessor:
                 # Simplified: use root post text for all nodes
                 # TODO: In future, extract text for each node individually
                 texts = [root_text] * num_nodes
-                x = self.bert_extractor.extract_batch(texts)
+                x = self.bert_extractor.extract_batch(texts, show_progress=False)
                 
                 # Create PyG Data object
                 data = Data(
@@ -493,9 +545,19 @@ class WeiboDataProcessor:
                 
                 graph_list.append(data)
                 
+                # Check and notify progress
+                if check_progress(idx):
+                    progress_pct = (idx + 1) / total_events * 100
+                    print(f"\n[BERT Progress] {progress_pct:.1f}% complete ({idx + 1}/{total_events} events processed)")
+                    last_notified = idx
+                
             except Exception as e:
                 print(f"Error processing event {eid}: {e}")
                 skipped += 1
+                if check_progress(idx):
+                    progress_pct = (idx + 1) / total_events * 100
+                    print(f"\n[BERT Progress] {progress_pct:.1f}% complete ({idx + 1}/{total_events} events processed)")
+                    last_notified = idx
                 continue
         
         print(f"\n✓ Successfully processed: {len(graph_list)} graphs")
