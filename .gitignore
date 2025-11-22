@@ -42,6 +42,7 @@ ENV/
 
 # Data and checkpoints (large files)
 data/processed/
+data/
 checkpoints/
 logs/
 *.pkl
