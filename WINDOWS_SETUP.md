@@ -6,7 +6,7 @@ This guide will help you set up the Rumor Detection project on a Windows PC.
 
 ### 1. Python Installation
 
-1. **Download Python 3.8+** (recommended: Python 3.9 or 3.10)
+1. **Download Python 3.8+** (recommended: Python 3.9, 3.10, or 3.11)
    - Visit: https://www.python.org/downloads/
    - Download the Windows installer (64-bit)
    - **Important**: During installation, check "Add Python to PATH"
@@ -27,8 +27,9 @@ If you have an NVIDIA GPU and want to use it for faster training:
 
 2. **Install CUDA Toolkit** (if using GPU)
    - Visit: https://developer.nvidia.com/cuda-downloads
-   - Download CUDA 11.8 or 12.1 (check PyTorch compatibility)
+   - Download CUDA 12.6 (recommended), 11.8, or 12.1 (check PyTorch compatibility)
    - Follow the installation wizard
+   - Verify installation: `nvidia-smi` in Command Prompt
 
 3. **Install cuDNN** (if using GPU)
    - Visit: https://developer.nvidia.com/cudnn
@@ -80,9 +81,16 @@ python -m pip install --upgrade pip
 
 ### Step 4: Install PyTorch (Choose CPU or GPU)
 
+**IMPORTANT**: Install PyTorch FIRST before installing other packages.
+
 **For CPU-only (slower, but simpler):**
 ```cmd
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+**For GPU (NVIDIA CUDA 12.6) - Recommended:**
+```cmd
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 ```
 
 **For GPU (NVIDIA CUDA 11.8):**
@@ -97,7 +105,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 **Verify PyTorch installation:**
 ```cmd
-python -c "import torch; print(torch.__version__); print('CUDA available:', torch.cuda.is_available())"
+python -c "import torch; print('PyTorch version:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A')"
 ```
 
 ### Step 5: Install PyTorch Geometric
@@ -114,15 +122,24 @@ pip install torch-geometric
 
 ### Step 6: Install Other Dependencies
 
+After PyTorch is installed, install all remaining dependencies:
+
 ```cmd
 pip install -r requirements.txt
 ```
 
-### Step 7: Install Additional Dependencies
+This will install:
+- `torch-geometric` (Graph Neural Networks)
+- `transformers` (BERT and language models)
+- `numpy` (Scientific computing)
+- `scikit-learn` (DBSCAN clustering, metrics)
+- `tqdm` (Progress bars)
+- `openai` (Azure OpenAI API integration)
+- `python-dotenv` (Environment variable management)
 
-```cmd
-pip install transformers sentence-transformers
-```
+**Note**: 
+- `torch-geometric` will automatically install its dependencies (torch-scatter, torch-sparse, torch-cluster, torch-spline-conv)
+- If you encounter issues with PyTorch Geometric, make sure PyTorch is installed first (Step 4)
 
 ---
 
@@ -173,13 +190,15 @@ pip install transformers sentence-transformers
 Ensure your data directory structure exists:
 ```
 data/
-├── Twitter/
-│   ├── Twitter15/
-│   └── Twitter16/
-└── Weibo/
+├── raw_text/              # Raw tweet/Weibo text files
+│   ├── Twitter15_source_tweets.txt
+│   ├── Twitter16_source_tweets.txt
+│   └── Weibo/            # Weibo JSON files
+├── processed/             # Preprocessed graph data (.pkl files, auto-generated)
+└── llm_cache.pkl         # LLM response cache (auto-generated)
 ```
 
-If your data is in a different location, set the `RUMOR_DATA_DIR` environment variable in `.env`.
+The `processed/` directory will be automatically created when you run the pipeline for the first time.
 
 ---
 
@@ -188,7 +207,7 @@ If your data is in a different location, set the `RUMOR_DATA_DIR` environment va
 ### Test 1: Verify Imports
 
 ```cmd
-python -c "import torch; import torch_geometric; import transformers; print('All imports successful!')"
+python -c "import torch; import torch_geometric; import transformers; import numpy; import sklearn; print('All imports successful!')"
 ```
 
 ### Test 2: Test Individual Components
@@ -260,6 +279,16 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - Reduce batch size in `config.py`: `BATCH_SIZE = 16` or `BATCH_SIZE = 8`
 - Use smaller sample ratio: `--sample_ratio 0.1`
 - Close other applications
+- Reduce `NUM_EPOCHS` in `config.py` if needed
+
+### Issue 8: PyTorch Geometric installation fails
+**Solution**:
+- Make sure PyTorch is installed first (Step 4)
+- Install PyTorch Geometric dependencies manually if needed:
+  ```cmd
+  pip install torch-scatter torch-sparse torch-cluster torch-spline-conv -f https://data.pyg.org/whl/torch-2.4.0+cu126.html
+  ```
+  (Replace `cu126` with your CUDA version, or `cpu` for CPU-only)
 
 ---
 
@@ -287,11 +316,15 @@ RumorDetection_FYP/
 ├── venv/                    # Virtual environment (created)
 ├── .env                     # Environment variables (you create)
 ├── data/                    # Data directory
-│   ├── Twitter/
-│   ├── Weibo/
-│   └── archive/
+│   ├── raw_text/            # Raw tweet/Weibo text files
+│   ├── processed/           # Preprocessed graph data (auto-created)
+│   └── llm_cache.pkl       # LLM response cache (auto-created)
 ├── checkpoints/             # Model checkpoints (auto-created)
 ├── logs/                    # Training logs (auto-created)
+│   ├── Twitter15/           # Twitter15 experiment logs
+│   └── Twitter16/           # Twitter16 experiment logs
+├── utils/                   # Utility modules
+│   └── visualization.py     # Training & result visualization
 ├── *.py                     # Python source files
 └── requirements.txt
 ```
@@ -319,6 +352,8 @@ If you encounter issues:
 
 ---
 
-**Last Updated**: 2024
+**Last Updated**: December 2024
 **Tested on**: Windows 10, Windows 11
+**Python Version**: 3.8+ (recommended: 3.9, 3.10, or 3.11)
+**PyTorch Version**: 2.4.0+ (with CUDA 12.6 support recommended)
 
