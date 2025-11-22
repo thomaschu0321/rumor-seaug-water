@@ -1,2 +1,40 @@
-# Minimal .gitignore - only ignore git internals
+# Git internals
 .git/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data and checkpoints (large files)
+data/processed/
+checkpoints/
+logs/
+*.pkl
+*.pt
+*.pth
+
+# Environment variables
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Results
+results_summary.csv

@@ -522,6 +522,166 @@ class SeAugPipeline:
         
         return results
     
+    def output_results(
+        self,
+        results: dict,
+        dataset_name: str,
+        sample_ratio: float = 1.0,
+        save_json: bool = True,
+        save_csv: bool = True
+    ):
+        """
+        Output and save results after training is complete
+        
+        Args:
+            results: Results dictionary from train_model()
+            dataset_name: Dataset name
+            sample_ratio: Sampling ratio used
+            save_json: Whether to save results to JSON file
+            save_csv: Whether to append results to CSV file
+        
+        Returns:
+            Dictionary with output file paths
+        """
+        import json
+        from datetime import datetime
+        
+        print("\n" + "="*70)
+        print("SeAug Pipeline Completed!")
+        print("="*70)
+        
+        # Print test results
+        print(f"\nFinal Test Results:")
+        print(f"  Accuracy:  {results['test_results']['accuracy']:.4f}")
+        print(f"  Precision: {results['test_results']['precision']:.4f}")
+        print(f"  Recall:    {results['test_results']['recall']:.4f}")
+        print(f"  F1-Score:  {results['test_results']['f1']:.4f}")
+        
+        # Print pipeline statistics
+        print(f"\nPipeline Statistics:")
+        print(f"  Total graphs: {self.stats['total_graphs']}")
+        print(f"  Total nodes: {self.stats['total_nodes']:,}")
+        if self.enable_augmentation:
+            print(f"  Augmented nodes: {self.stats['augmented_nodes']:,} "
+                  f"({self.stats['augmented_nodes']/self.stats['total_nodes']*100:.1f}%)")
+            print(f"  Augmentation time: {self.stats['augmentation_time']:.2f}s")
+        
+        # Print training history summary
+        if 'history' in results and results['history']:
+            history = results['history']
+            print(f"\nTraining History Summary:")
+            print(f"  Best validation accuracy: {results.get('best_val_acc', 0):.4f}")
+            if history.get('train_acc'):
+                print(f"  Final train accuracy: {history['train_acc'][-1]:.4f}")
+            if history.get('val_acc'):
+                print(f"  Final val accuracy: {history['val_acc'][-1]:.4f}")
+        
+        output_files = {}
+        
+        # Save to JSON
+        if save_json:
+            json_path = os.path.join(
+                self.config.SAVE_DIR,
+                f'{dataset_name}_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+            )
+            
+            json_results = {
+                'dataset': dataset_name,
+                'timestamp': datetime.now().isoformat(),
+                'config': {
+                    'enable_augmentation': self.enable_augmentation,
+                    'node_selection_strategy': self.node_selection_strategy,
+                    'fusion_strategy': self.fusion_strategy,
+                    'augmentation_ratio': self.augmentation_ratio,
+                    'gnn_backbone': self.gnn_backbone,
+                    'sample_ratio': sample_ratio,
+                    'batch_size': self.batch_size
+                },
+                'statistics': {
+                    'total_graphs': self.stats['total_graphs'],
+                    'total_nodes': self.stats['total_nodes'],
+                    'augmented_nodes': self.stats['augmented_nodes'],
+                    'augmentation_time': self.stats['augmentation_time']
+                },
+                'test_results': results['test_results'],
+                'best_val_acc': results.get('best_val_acc', 0),
+                'history': {
+                    'train_loss': [float(x) for x in results.get('history', {}).get('train_loss', [])],
+                    'val_loss': [float(x) for x in results.get('history', {}).get('val_loss', [])],
+                    'train_acc': [float(x) for x in results.get('history', {}).get('train_acc', [])],
+                    'val_acc': [float(x) for x in results.get('history', {}).get('val_acc', [])],
+                    'train_f1': [float(x) for x in results.get('history', {}).get('train_f1', [])],
+                    'val_f1': [float(x) for x in results.get('history', {}).get('val_f1', [])]
+                }
+            }
+            
+            with open(json_path, 'w') as f:
+                json.dump(json_results, f, indent=2)
+            
+            output_files['json'] = json_path
+            print(f"\nResults saved to JSON: {json_path}")
+        
+        # Save to CSV
+        if save_csv:
+            csv_path = os.path.join(self.config.ROOT_DIR, "results_summary.csv")
+            file_exists = os.path.isfile(csv_path)
+            fieldnames = [
+                "dataset",
+                "model_type",
+                "enable_augmentation",
+                "node_strategy",
+                "fusion_strategy",
+                "augmentation_ratio",
+                "gnn_backbone",
+                "sample_ratio",
+                "total_graphs",
+                "total_nodes",
+                "augmented_nodes",
+                "augmentation_time",
+                "accuracy",
+                "precision",
+                "recall",
+                "f1",
+            ]
+            
+            # Determine high-level model description
+            if self.enable_augmentation:
+                model_desc = "SeAug with LLM"
+            else:
+                model_desc = "Baseline (No Augmentation)"
+            
+            with open(csv_path, mode="a", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(
+                    {
+                        "dataset": dataset_name,
+                        "model_type": model_desc,
+                        "enable_augmentation": self.enable_augmentation,
+                        "node_strategy": self.node_selection_strategy,
+                        "fusion_strategy": self.fusion_strategy,
+                        "augmentation_ratio": self.augmentation_ratio,
+                        "gnn_backbone": self.gnn_backbone,
+                        "sample_ratio": sample_ratio,
+                        "total_graphs": self.stats["total_graphs"],
+                        "total_nodes": self.stats["total_nodes"],
+                        "augmented_nodes": self.stats["augmented_nodes"],
+                        "augmentation_time": round(self.stats["augmentation_time"], 2),
+                        "accuracy": results["test_results"]["accuracy"],
+                        "precision": results["test_results"]["precision"],
+                        "recall": results["test_results"]["recall"],
+                        "f1": results["test_results"]["f1"],
+                    }
+                )
+            
+            output_files['csv'] = csv_path
+            print(f"Results appended to CSV: {csv_path}")
+        
+        print("="*70)
+        
+        return output_files
+    
     def run(self, dataset_name: str, sample_ratio: float = 1.0):
         """
         Run complete SeAug pipeline
@@ -552,76 +712,8 @@ class SeAugPipeline:
         # Stage 4: Train model
         results = self.train_model(train_list, val_list, test_list, dataset_name)
         
-        # Print final results to stdout (no file logging / visualizations)
-        print("\n" + "="*70)
-        print("SeAug Pipeline Completed!")
-        print("="*70)
-        print(f"\nFinal Test Results:")
-        print(f"  Accuracy:  {results['test_results']['accuracy']:.4f}")
-        print(f"  Precision: {results['test_results']['precision']:.4f}")
-        print(f"  Recall:    {results['test_results']['recall']:.4f}")
-        print(f"  F1-Score:  {results['test_results']['f1']:.4f}")
-        
-        print(f"\nPipeline Statistics:")
-        print(f"  Total graphs: {self.stats['total_graphs']}")
-        print(f"  Total nodes: {self.stats['total_nodes']:,}")
-        if self.enable_augmentation:
-            print(f"  Augmented nodes: {self.stats['augmented_nodes']:,} "
-                  f"({self.stats['augmented_nodes']/self.stats['total_nodes']*100:.1f}%)")
-            print(f"  Augmentation time: {self.stats['augmentation_time']:.2f}s")
-        
-        # Append a concise summary row to a CSV file for easy reporting.
-        csv_path = os.path.join(self.config.ROOT_DIR, "results_summary.csv")
-        file_exists = os.path.isfile(csv_path)
-        fieldnames = [
-            "dataset",
-            "model_type",
-            "enable_augmentation",
-            "node_strategy",
-            "fusion_strategy",
-            "augmentation_ratio",
-            "gnn_backbone",
-            "sample_ratio",
-            "total_graphs",
-            "total_nodes",
-            "augmented_nodes",
-            "augmentation_time",
-            "accuracy",
-            "precision",
-            "recall",
-            "f1",
-        ]
-        
-        # Determine high-level model description
-        if self.enable_augmentation:
-            model_desc = "SeAug with LLM"
-        else:
-            model_desc = "Baseline (No Augmentation)"
-        
-        with open(csv_path, mode="a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(
-                {
-                    "dataset": dataset_name,
-                    "model_type": model_desc,
-                    "enable_augmentation": self.enable_augmentation,
-                    "node_strategy": self.node_selection_strategy,
-                    "fusion_strategy": self.fusion_strategy,
-                    "augmentation_ratio": self.augmentation_ratio,
-                    "gnn_backbone": self.gnn_backbone,
-                    "sample_ratio": sample_ratio,
-                    "total_graphs": self.stats["total_graphs"],
-                    "total_nodes": self.stats["total_nodes"],
-                    "augmented_nodes": self.stats["augmented_nodes"],
-                    "augmentation_time": round(self.stats["augmentation_time"], 2),
-                    "accuracy": results["test_results"]["accuracy"],
-                    "precision": results["test_results"]["precision"],
-                    "recall": results["test_results"]["recall"],
-                    "f1": results["test_results"]["f1"],
-                }
-            )
+        # Output results
+        output_files = self.output_results(results, dataset_name, sample_ratio)
         
         # Results and history are returned so that external scripts / notebooks
         # can decide how to present or store them (tables, plots, etc.).
