@@ -26,41 +26,94 @@ venv/
 ENV/
 env/
 
-# PyTorch
+# PyTorch & Model Files
 *.pth
 *.pt
+*.ckpt
+*.h5
+*.pb
+*.onnx
 
 # Data
-data/processed/*.pkl
+data/processed/
 data/raw/
+data/raw_text/
 data/Twitter/
 data/Weibo/
 data/archive/
 
 # Logs
-logs/*.png
-logs/*.txt
+logs/
+*.log
 
 # Checkpoints
-checkpoints/*.pt
+checkpoints/
+models/
+saved_models/
+predictions/
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
+*.sublime-project
+*.sublime-workspace
 
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
 
-# MacOS
-.DS_Store
-
 # Others
-*.log
 .cache/
+*.cache
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+# Experiment outputs
+experiment_summary.json
+experiment_results/
+results/
+outputs/
+*.csv
+*.tsv
+
+# Workspace files
+*.code-workspace
+
+# Coverage reports
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+
+# Profiling
+*.prof
+*.lprof
+
+# Temporary Python files (additional patterns)
+*.pyd
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Editor backups
+*~
+*.swp
+*.swo
+.#*
+\#*#
+.*.sw?
 
 # Environment variables (contains API keys)
 .env
@@ -71,9 +124,7 @@ checkpoints/*.pt
 data/llm_cache.pkl
 data/llm_results/
 
-# Methodology and pipeline documentation (private)
-PHASE4_METHODOLOGY.md
-PIPELINE_SIMPLE.md
-PIPELINE_SIMPLE_EN.md
+# API quota tracking
+data/.seaug_api_quota.json
 
 

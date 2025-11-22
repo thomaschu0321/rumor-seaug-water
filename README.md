@@ -17,6 +17,8 @@ SeAug (Selective LLM Augmentation Pipeline) implements a 4-stage node-level augm
 
 ## Installation
 
+> **📘 Windows Users**: For detailed Windows setup instructions, see [WINDOWS_SETUP.md](WINDOWS_SETUP.md)
+
 ### Prerequisites
 
 - Python 3.8+
