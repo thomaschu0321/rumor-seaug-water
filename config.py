@@ -65,8 +65,7 @@ class Config:
     TEST_RATIO = 0.15
     
     # ========== Output Configuration ==========
-    SAVE_DIR = os.path.join(PROJECT_ROOT, 'checkpoints')
-    LOG_DIR = os.path.join(PROJECT_ROOT, 'logs')
+    SAVE_DIR = os.path.join(PROJECT_ROOT, 'results')
     PRINT_FREQ = 10     # Print every N batches
     
     @classmethod
@@ -86,7 +85,6 @@ class Config:
         os.makedirs(cls.DATA_DIR, exist_ok=True)
         os.makedirs(cls.PROCESSED_DIR, exist_ok=True)
         os.makedirs(cls.SAVE_DIR, exist_ok=True)
-        os.makedirs(cls.LOG_DIR, exist_ok=True)
         print("✓ Project directories created")
     
     # ========== LLM Configuration ==========

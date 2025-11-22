@@ -14,18 +14,65 @@ Usage:
 """
 
 import os
+import sys
 import csv
 import argparse
-import numpy as np
-import torch
-from tqdm import tqdm
 
-from config import Config
-from data_preprocessing import TwitterDataProcessor, WeiboDataProcessor, split_data
-from node_selector import NodeSelector
-from node_augmentor import LanguageModelEncoder, NodeAugmentor
-from model_seaug import get_seaug_model
-from torch_geometric.loader import DataLoader
+# Check for required dependencies and provide helpful error messages
+try:
+    import numpy as np
+except ImportError:
+    print("=" * 70)
+    print("ERROR: Missing required dependency 'numpy'")
+    print("=" * 70)
+    print("\nPlease install dependencies by running:")
+    print("  pip install -r requirements.txt")
+    print("\nOr install numpy directly:")
+    print("  pip install numpy")
+    print("\nFor Windows with CUDA support, install PyTorch first:")
+    print("  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126")
+    print("=" * 70)
+    sys.exit(1)
+
+try:
+    import torch
+except ImportError:
+    print("=" * 70)
+    print("ERROR: Missing required dependency 'torch'")
+    print("=" * 70)
+    print("\nPlease install PyTorch first:")
+    print("  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126")
+    print("\nThen install remaining dependencies:")
+    print("  pip install -r requirements.txt")
+    print("=" * 70)
+    sys.exit(1)
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    print("=" * 70)
+    print("ERROR: Missing required dependency 'tqdm'")
+    print("=" * 70)
+    print("\nPlease install dependencies:")
+    print("  pip install -r requirements.txt")
+    print("=" * 70)
+    sys.exit(1)
+
+try:
+    from config import Config
+    from data_preprocessing import TwitterDataProcessor, WeiboDataProcessor, split_data
+    from node_selector import NodeSelector
+    from node_augmentor import LanguageModelEncoder, NodeAugmentor
+    from model_seaug import get_seaug_model
+    from torch_geometric.loader import DataLoader
+except ImportError as e:
+    print("=" * 70)
+    print(f"ERROR: Missing required module: {e}")
+    print("=" * 70)
+    print("\nPlease ensure all project files are present and dependencies are installed:")
+    print("  pip install -r requirements.txt")
+    print("=" * 70)
+    sys.exit(1)
 
 
 class SeAugPipeline:
@@ -623,7 +670,7 @@ class SeAugPipeline:
         
         # Save to CSV
         if save_csv:
-            csv_path = os.path.join(self.config.PROJECT_ROOT, "results_summary.csv")
+            csv_path = os.path.join(self.config.SAVE_DIR, "results_summary.csv")
             file_exists = os.path.isfile(csv_path)
             fieldnames = [
                 "dataset",

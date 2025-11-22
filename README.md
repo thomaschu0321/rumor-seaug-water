@@ -199,8 +199,10 @@ print(f"Test F1: {results['test_results']['f1']:.4f}")
     - `Twitter16/` - Twitter16 data files
   - `Weibo/` - Weibo dataset files
   - `processed/` - Preprocessed graph data (.pkl files, auto-generated)
-- `checkpoints/` - Saved model checkpoints (auto-generated)
-- `results_summary.csv` - Experiment results summary (auto-generated)
+- `results/` - Saved model checkpoints and results (auto-generated)
+  - Model checkpoints (`.pt` files)
+  - JSON results files
+  - `results_summary.csv` - Experiment results summary
 
 ---
 
@@ -375,18 +377,18 @@ Training results are automatically saved:
 
 ### Output Files
 
-1. **JSON Results** (`checkpoints/{dataset}_results_{timestamp}.json`):
+1. **JSON Results** (`results/{dataset}_results_{timestamp}.json`):
    - Complete experiment configuration
    - Training history (loss, accuracy, F1 per epoch)
    - Test set metrics (accuracy, precision, recall, F1)
    - Pipeline statistics (nodes augmented, augmentation time)
 
-2. **CSV Summary** (`results_summary.csv`):
+2. **CSV Summary** (`results/results_summary.csv`):
    - Appends each experiment run as a row
    - Includes all configuration parameters and final metrics
    - Useful for comparing multiple experiments
 
-3. **Model Checkpoints** (`checkpoints/{dataset}_seaug_best.pt`):
+3. **Model Checkpoints** (`results/{dataset}_seaug_best.pt`):
    - Best model weights (based on validation accuracy)
    - Can be loaded for inference or further training
 
