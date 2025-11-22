@@ -623,7 +623,7 @@ class SeAugPipeline:
         
         # Save to CSV
         if save_csv:
-            csv_path = os.path.join(self.config.ROOT_DIR, "results_summary.csv")
+            csv_path = os.path.join(self.config.PROJECT_ROOT, "results_summary.csv")
             file_exists = os.path.isfile(csv_path)
             fieldnames = [
                 "dataset",

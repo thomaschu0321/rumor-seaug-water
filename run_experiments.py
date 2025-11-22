@@ -202,10 +202,18 @@ Examples:
         
         if not success:
             print(f"\n⚠ Warning: Experiment '{experiment['name']}' failed!")
-            response = input("Continue with remaining experiments? (y/n): ").strip().lower()
-            if response != 'y':
-                print("Stopping experiments.")
-                break
+            # Check if running in interactive mode
+            if sys.stdin.isatty():
+                try:
+                    response = input("Continue with remaining experiments? (y/n): ").strip().lower()
+                    if response != 'y':
+                        print("Stopping experiments.")
+                        break
+                except (EOFError, KeyboardInterrupt):
+                    print("\nNon-interactive mode detected. Continuing with remaining experiments...")
+            else:
+                # Non-interactive mode: continue automatically
+                print("Non-interactive mode detected. Continuing with remaining experiments...")
     
     # Print summary
     end_time = datetime.now()
