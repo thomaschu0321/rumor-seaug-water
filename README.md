@@ -1,4 +1,4 @@
-# SeAug Framework for Rumor Detection
+# Graph-Based Rumor Detection with Selective Large Language Model Augmentation
 
 ## Overview
 
