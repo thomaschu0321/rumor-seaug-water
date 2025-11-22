@@ -112,6 +112,12 @@ Examples:
   # Run all experiments on Twitter15
   python run_experiments.py
   
+  # Run only GAT and GCN baselines (no augmentation)
+  python run_experiments.py --only GAT_Baseline GCN_Baseline
+  
+  # Run baselines with sample_ratio 0.1
+  python run_experiments.py --only GAT_Baseline GCN_Baseline --sample_ratio 0.1
+  
   # Run on a different dataset
   python run_experiments.py --dataset Twitter16
   
@@ -133,6 +139,8 @@ Examples:
                        help='Feature fusion strategy (default: concat)')
     parser.add_argument('--batch_size', type=int, default=20,
                        help='Batch size for LLM API calls (default: 20)')
+    parser.add_argument('--sample_ratio', type=float, default=1.0,
+                       help='Data sampling ratio (default: 1.0)')
     parser.add_argument('--skip', type=str, nargs='+',
                        choices=['GAT_Baseline', 'GCN_Baseline', 'SeAug_GAT', 'SeAug_GCN'],
                        help='Skip specific experiments')
@@ -183,7 +191,8 @@ Examples:
             augmentation_ratio=args.augmentation_ratio,
             node_strategy=args.node_strategy,
             fusion_strategy=args.fusion_strategy,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            sample_ratio=args.sample_ratio
         )
         
         results[experiment['name']] = {
