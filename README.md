@@ -255,7 +255,7 @@ NUM_EPOCHS = 50
 
 ### Data Setup
 
-The framework expects data in the BiGCN project format. Ensure your data directory structure matches:
+Ensure your data directory structure matches:
 
 ```
 data/

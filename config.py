@@ -14,28 +14,6 @@ class Config:
     # ========== Project Paths ==========
     PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
     
-    # Data path configuration (multiple methods by priority)
-    # 1. Read from environment variable (highest priority, convenient for changing computers)
-    # 2. From current project's data/raw directory
-    # 3. From original BiGCN project (only when on the same computer)
-    
-    _env_data_dir = os.environ.get('RUMOR_DATA_DIR')  # Can specify via environment variable
-    
-    if _env_data_dir and os.path.exists(_env_data_dir):
-        # Option 1: Use path specified by environment variable
-        BIGCN_DATA_DIR = _env_data_dir
-        print(f"✓ Using data path from environment variable: {BIGCN_DATA_DIR}")
-    elif os.path.exists(os.path.join(PROJECT_ROOT, 'data', 'raw')):
-        # Option 2: Use project's data/raw directory (data has been copied)
-        BIGCN_DATA_DIR = os.path.join(PROJECT_ROOT, 'data', 'raw')
-        print(f"✓ Using data from project: {BIGCN_DATA_DIR}")
-    else:
-        # Option 3: Default to original BiGCN project (same computer)
-        BIGCN_DATA_DIR = os.path.join(os.path.dirname(PROJECT_ROOT), 'BiGCN-master', 'data')
-        if not os.path.exists(BIGCN_DATA_DIR):
-            print(f"⚠️  Warning: Data path does not exist: {BIGCN_DATA_DIR}")
-            print(f"   Please set environment variable or copy data (run python setup_data.py)")
-    
     # Project data storage paths
     DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
     PROCESSED_DIR = os.path.join(DATA_DIR, 'processed')

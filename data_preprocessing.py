@@ -1,6 +1,6 @@
 """
 Data Preprocessing Module
-Convert from BiGCN's original data format to simplified graph structure
+Convert from original data format to simplified graph structure
 """
 import os
 import numpy as np
@@ -310,14 +310,14 @@ class WeiboDataProcessor:
         self.feature_dim = feature_dim
         self.sample_ratio = sample_ratio
         
-        # Use BiGCN project data path
-        self.data_path = os.path.join(Config.BIGCN_DATA_DIR, dataname)
+        # Use project data path structure: data/Weibo/
+        self.data_path = os.path.join(Config.DATA_DIR, 'Weibo')
         
         # Check if path exists
         if not os.path.exists(self.data_path):
             raise FileNotFoundError(
                 f"Data path does not exist: {self.data_path}\n"
-                f"Please ensure data is in correct location"
+                f"Please ensure Weibo data is in correct location"
             )
         
         # Initialize BERT extractor (always required)
