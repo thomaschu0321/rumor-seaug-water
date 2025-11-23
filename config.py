@@ -102,7 +102,7 @@ class Config:
     # Alternatives: 'deepseek-reasoner' (better reasoning, higher cost), 'deepseek-v3' (latest, most powerful)
     DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
     DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')  # Recommended: deepseek-chat
-    DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+    DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://www.chataiapi.com')
     
     # LLM Parameters
     LLM_MAX_TOKENS = int(os.environ.get('LLM_MAX_TOKENS', '500'))

@@ -135,22 +135,24 @@ class NodeAugmentor:
     def __init__(
         self,
         lm_encoder: LanguageModelEncoder = None,
-        use_llm: bool = True,
+        use_llm: bool = None,
         api_key: str = None,
         model: str = None,
-        temperature: float = 0.7,
-        max_tokens: int = 150
+        temperature: float = None,
+        max_tokens: int = None,
+        batch_size: int = None
     ):
         """
         Initialize Node Augmentor
         
         Args:
             lm_encoder: Language Model encoder instance
-            use_llm: Whether to use LLM for augmentation
+            use_llm: Whether to use LLM for augmentation (defaults to Config.USE_LLM)
             api_key: API key (optional, defaults to Config.AZURE_API_KEY or Config.DEEPSEEK_API_KEY based on LLM_PROVIDER)
             model: Model name (optional, defaults to Config.AZURE_MODEL or Config.DEEPSEEK_MODEL based on LLM_PROVIDER)
-            temperature: Generation temperature
-            max_tokens: Max tokens per generation
+            temperature: Generation temperature (defaults to Config.LLM_TEMPERATURE)
+            max_tokens: Max tokens per generation (defaults to Config.LLM_MAX_TOKENS)
+            batch_size: Number of nodes per API call (defaults to Config.LLM_BATCH_SIZE)
         
         Note: Supports both Azure OpenAI and DeepSeek providers. Set LLM_PROVIDER in config to switch.
         """
@@ -160,9 +162,11 @@ class NodeAugmentor:
         else:
             self.lm_encoder = lm_encoder
         
-        self.use_llm = use_llm and LLM_AVAILABLE
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+        # Use Config defaults if not provided
+        self.use_llm = (use_llm if use_llm is not None else Config.USE_LLM) and LLM_AVAILABLE
+        self.temperature = temperature if temperature is not None else Config.LLM_TEMPERATURE
+        self.max_tokens = max_tokens if max_tokens is not None else Config.LLM_MAX_TOKENS
+        self.batch_size = batch_size if batch_size is not None else Config.LLM_BATCH_SIZE
         
         # Initialize LLM client
         if self.use_llm:
@@ -333,7 +337,7 @@ Paraphrased version (one line only):"""
         augmented = self._call_llm(prompt)
         return augmented if augmented else text
     
-    def augment_batch_texts(self, texts: List[str], batch_size: int = 20) -> List[str]:
+    def augment_batch_texts(self, texts: List[str], batch_size: int = None) -> List[str]:
         """
         Augment multiple texts in batched API calls (TOKEN EFFICIENT!)
         
@@ -348,11 +352,13 @@ Paraphrased version (one line only):"""
         
         Args:
             texts: List of texts to augment
-            batch_size: Number of texts per API call (default: 20, recommended: 10-20)
+            batch_size: Number of texts per API call (defaults to self.batch_size, recommended: 10-20)
         
         Returns:
             List of augmented texts (same length as input)
         """
+        if batch_size is None:
+            batch_size = self.batch_size
         if not self.use_llm or not texts:
             return texts
         
@@ -463,7 +469,7 @@ Paraphrased versions (one per line, no numbering):"""
         selected_node_indices: np.ndarray,
         node_texts: List[str] = None,
         use_batching: bool = True,
-        batch_size: int = 20
+        batch_size: int = None
     ) -> Data:
         """
         Augment selected nodes in a graph
@@ -473,11 +479,13 @@ Paraphrased versions (one per line, no numbering):"""
             selected_node_indices: Indices of nodes to augment
             node_texts: Original texts for each node (if available)
             use_batching: If True, batch multiple nodes in single API calls (RECOMMENDED)
-            batch_size: Number of nodes per API call (default: 20, recommended: 10-20)
+            batch_size: Number of nodes per API call (defaults to self.batch_size, recommended: 10-20)
         
         Returns:
             Augmented Data object with x_aug field
         """
+        if batch_size is None:
+            batch_size = self.batch_size
         num_nodes = data.x.shape[0]
         
         # If no texts provided, create dummy texts
@@ -536,7 +544,7 @@ Paraphrased versions (one per line, no numbering):"""
         selected_nodes_list: List[np.ndarray],
         texts_list: List[List[str]] = None,
         verbose: bool = True,
-        batch_size: int = 20
+        batch_size: int = None
     ) -> List[Data]:
         """
         Augment a batch of graphs with batched API calls
@@ -546,11 +554,13 @@ Paraphrased versions (one per line, no numbering):"""
             selected_nodes_list: List of selected node indices for each graph
             texts_list: List of node texts for each graph
             verbose: Show progress bar
-            batch_size: Number of nodes per API call (default: 20)
+            batch_size: Number of nodes per API call (defaults to self.batch_size)
         
         Returns:
             List of augmented Data objects
         """
+        if batch_size is None:
+            batch_size = self.batch_size
         augmented_graphs = []
         
         iterator = tqdm(zip(graph_list, selected_nodes_list), 
