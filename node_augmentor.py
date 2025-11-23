@@ -29,9 +29,16 @@ from transformers import AutoTokenizer, AutoModel
 # Import LLM client
 try:
     from openai import AzureOpenAI, OpenAI
+    from openai import APITimeoutError, APIConnectionError, APIError
+    try:
+        import httpx
+        HTTPX_AVAILABLE = True
+    except ImportError:
+        HTTPX_AVAILABLE = False
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
+    HTTPX_AVAILABLE = False
     print("⚠️  Warning: openai package not installed. LLM augmentation disabled.")
 
 
@@ -179,7 +186,9 @@ class NodeAugmentor:
             'llm_calls': 0,
             'cache_hits': 0,
             'quota_exceeded': 0,
-            'rate_limited': 0
+            'rate_limited': 0,
+            'network_errors': 0,
+            'retries': 0
         }
     
     def _init_llm_client(self, api_key: str = None, model: str = None):
@@ -205,9 +214,12 @@ class NodeAugmentor:
                 
                 # Use OpenAI SDK (DeepSeek is OpenAI-compatible)
                 from openai import OpenAI
+                # Configure timeout to prevent hanging (connect_timeout, read_timeout)
+                timeout = (10.0, Config.LLM_TIMEOUT)
                 self.client = OpenAI(
                     api_key=self.api_key,
-                    base_url=self.base_url
+                    base_url=self.base_url,
+                    timeout=timeout
                 )
                 print(f"✓ LLM Client initialized (DeepSeek)")
                 print(f"  Model: {self.model}")
@@ -227,10 +239,13 @@ class NodeAugmentor:
                 
                 # Use AzureOpenAI SDK
                 from openai import AzureOpenAI
+                # Configure timeout to prevent hanging (connect_timeout, read_timeout)
+                timeout = (10.0, Config.LLM_TIMEOUT)
                 self.client = AzureOpenAI(
                     azure_endpoint=self.endpoint,
                     api_version=self.api_version,
-                    api_key=self.api_key
+                    api_key=self.api_key,
+                    timeout=timeout
                 )
                 print(f"✓ LLM Client initialized (Azure OpenAI)")
                 print(f"  Model: {self.model}")
@@ -248,8 +263,14 @@ class NodeAugmentor:
                 print(f"   Make sure LLM_PROVIDER is set to 'azure' or 'deepseek' in your .env file")
             self.use_llm = False
     
-    def _call_llm(self, prompt: str) -> str:
-        """Call LLM API"""
+    def _call_llm(self, prompt: str, retry_count: int = 0) -> str:
+        """
+        Call LLM API with retry logic for network/SSL errors
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            retry_count: Current retry attempt (internal use)
+        """
         if not self.use_llm:
             return None
         
@@ -293,7 +314,39 @@ class NodeAugmentor:
             
             return text
             
-        except Exception as e:
+        except (APITimeoutError, APIConnectionError) as e:
+            # Network/SSL/Connection errors from OpenAI SDK - retry with exponential backoff
+            self.stats['network_errors'] += 1
+            
+            if retry_count < Config.LLM_MAX_RETRIES:
+                delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)  # Exponential backoff
+                self.stats['retries'] += 1
+                print(f"⚠️  Network/SSL error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {type(e).__name__}")
+                print(f"   → Retrying in {delay} seconds...")
+                time.sleep(delay)
+                return self._call_llm(prompt, retry_count + 1)
+            else:
+                print(f"⚠️  Network/SSL error after {Config.LLM_MAX_RETRIES} retries: {e}")
+                print(f"   → Skipping this request")
+                return None
+                
+        except (ConnectionError, OSError) as e:
+            # General connection/SSL errors - retry with exponential backoff
+            self.stats['network_errors'] += 1
+            
+            if retry_count < Config.LLM_MAX_RETRIES:
+                delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)
+                self.stats['retries'] += 1
+                print(f"⚠️  Connection error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {type(e).__name__}")
+                print(f"   → Retrying in {delay} seconds...")
+                time.sleep(delay)
+                return self._call_llm(prompt, retry_count + 1)
+            else:
+                print(f"⚠️  Connection error after {Config.LLM_MAX_RETRIES} retries: {e}")
+                print(f"   → Skipping this request")
+                return None
+            
+        except APIError as e:
             error_str = str(e)
             
             # Handle quota exceeded (403)
@@ -302,17 +355,61 @@ class NodeAugmentor:
                 self.stats['quota_exceeded'] += 1
                 # Disable LLM for remaining calls
                 print("   → Disabling LLM for remaining nodes")
+                self.use_llm = False
                 return None
             
-            # Handle rate limit
+            # Handle rate limit (429)
             elif "429" in error_str or "rate limit" in error_str.lower():
                 print(f"⚠️  Rate limit hit: {e}")
                 self.stats['rate_limited'] += 1
-                time.sleep(60)  # Wait 1 minute
-                return self._call_llm(prompt)  # Retry once
+                if retry_count < Config.LLM_MAX_RETRIES:
+                    delay = 60  # Wait 1 minute for rate limits
+                    self.stats['retries'] += 1
+                    print(f"   → Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                    return self._call_llm(prompt, retry_count + 1)
+                else:
+                    print(f"   → Max retries reached, skipping")
+                    return None
             
             else:
-                print(f"⚠️  LLM call failed: {e}")
+                print(f"⚠️  LLM API error: {e}")
+                return None
+                
+        except Exception as e:
+            # Catch-all for other errors (including httpx timeouts if available)
+            error_str = str(e)
+            error_type = type(e).__name__
+            
+            # Check if it's an httpx timeout error (if httpx is available)
+            if HTTPX_AVAILABLE and isinstance(e, (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException)):
+                self.stats['network_errors'] += 1
+                if retry_count < Config.LLM_MAX_RETRIES:
+                    delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)
+                    self.stats['retries'] += 1
+                    print(f"⚠️  Timeout error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {error_type}")
+                    print(f"   → Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                    return self._call_llm(prompt, retry_count + 1)
+                else:
+                    print(f"⚠️  Timeout error after {Config.LLM_MAX_RETRIES} retries: {e}")
+                    return None
+            
+            # Check if it's a network-related error by error message
+            elif any(keyword in error_str.lower() for keyword in ['ssl', 'socket', 'connection', 'timeout', 'network', 'read']):
+                self.stats['network_errors'] += 1
+                if retry_count < Config.LLM_MAX_RETRIES:
+                    delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)
+                    self.stats['retries'] += 1
+                    print(f"⚠️  Network-related error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {error_type}")
+                    print(f"   → Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                    return self._call_llm(prompt, retry_count + 1)
+                else:
+                    print(f"⚠️  Network error after {Config.LLM_MAX_RETRIES} retries: {error_type}: {e}")
+                    return None
+            else:
+                print(f"⚠️  LLM call failed: {error_type}: {e}")
                 return None
     
     def augment_node_text(self, text: str) -> str:

@@ -110,6 +110,11 @@ class Config:
     LLM_AUGMENTATION_FACTOR = int(os.environ.get('LLM_AUGMENTATION_FACTOR', '5'))
     LLM_BATCH_SIZE = int(os.environ.get('LLM_BATCH_SIZE', '10'))
     
+    # Network/Timeout Configuration
+    LLM_TIMEOUT = int(os.environ.get('LLM_TIMEOUT', '120'))  # 120 seconds timeout
+    LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '3'))  # Max retry attempts
+    LLM_RETRY_DELAY = int(os.environ.get('LLM_RETRY_DELAY', '5'))  # Initial retry delay in seconds
+    
     # Cost Control
     LLM_MAX_SAMPLES = int(os.environ.get('LLM_MAX_SAMPLES', '50'))
     LLM_ENABLE_CACHE = os.environ.get('LLM_ENABLE_CACHE', 'true').lower() == 'true'
