@@ -19,40 +19,21 @@ class Config:
     PROCESSED_DIR = os.path.join(DATA_DIR, 'processed')
     
     # ========== Data Configuration ==========
-    # Use full data (no sampling)
-    SAMPLE_RATIO = 1.0  # Use 100% of data
-    
-    # Feature configuration
-    FEATURE_DIM = 768  # BERT feature dimension (always use BERT)
-    NUM_CLASSES = 2     # 2 classes: non-rumor(0) vs rumor(1)
+    FEATURE_DIM = 768  # BERT feature dimension
+    NUM_CLASSES = 2     # Binary classification
     
     # ========== Model Configuration ==========
-    GNN_BACKBONE = 'gcn'  # GNN backbone: 'gcn' or 'gat'
     HIDDEN_DIM = 32       # GNN hidden layer dimension
     NUM_GNN_LAYERS = 2    # Number of GNN layers
-    DROPOUT = 0.7         # Dropout rate (increased to reduce overfitting)
+    DROPOUT = 0.7         # Dropout rate
     GAT_HEADS = 4         # Number of attention heads for GAT
     
-    # ========== XGBoost Adaptive Classifier Configuration ==========
-    USE_XGBOOST = True  # Whether to use XGBoost adaptive classifier
-    XGBOOST_N_ESTIMATORS = 100  # Number of trees
-    XGBOOST_MAX_DEPTH = 6       # Maximum tree depth
-    XGBOOST_LEARNING_RATE = 0.1 # Learning rate (shrinkage)
-    XGBOOST_SUBSAMPLE = 0.8     # Sample ratio for each tree
-    XGBOOST_COLSAMPLE = 0.8     # Feature ratio for each tree
-    XGBOOST_GAMMA = 0           # Minimum loss reduction for split
-    XGBOOST_REG_ALPHA = 0       # L1 regularization
-    XGBOOST_REG_LAMBDA = 1      # L2 regularization
-    XGBOOST_CONFIDENCE_THRESHOLD = 0.6  # Low confidence threshold
-    
     # ========== Training Configuration ==========
-    BATCH_SIZE = 32     # Batch size (can be larger with full data)
+    BATCH_SIZE = 32     # Batch size
     LEARNING_RATE = 0.001
-    WEIGHT_DECAY = 1e-3  # L2 regularization (increased to reduce overfitting)
-    NUM_EPOCHS = 100    # Maximum training epochs (full data needs more epochs)
-    
-    # Early stopping
-    PATIENCE = 5       # Early stopping patience (reduced to stop sooner)
+    WEIGHT_DECAY = 1e-3  # L2 regularization
+    NUM_EPOCHS = 100    # Maximum training epochs
+    PATIENCE = 5        # Early stopping patience
     
     # ========== Runtime Configuration ==========
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -66,18 +47,6 @@ class Config:
     
     # ========== Output Configuration ==========
     SAVE_DIR = os.path.join(PROJECT_ROOT, 'results')
-    PRINT_FREQ = 10     # Print every N batches
-    
-    @classmethod
-    def display(cls):
-        """Display current configuration"""
-        print("=" * 50)
-        print("Current Configuration:")
-        print("=" * 50)
-        for key, value in cls.__dict__.items():
-            if not key.startswith('_') and not callable(value):
-                print(f"{key:20s}: {value}")
-        print("=" * 50)
     
     @classmethod
     def create_dirs(cls):
@@ -85,7 +54,7 @@ class Config:
         os.makedirs(cls.DATA_DIR, exist_ok=True)
         os.makedirs(cls.PROCESSED_DIR, exist_ok=True)
         os.makedirs(cls.SAVE_DIR, exist_ok=True)
-        print("✓ Project directories created")
+        print("Project directories created")
     
     # ========== LLM Configuration ==========
     # LLM Provider: 'azure' or 'deepseek'
@@ -95,30 +64,22 @@ class Config:
     AZURE_API_KEY = os.environ.get('AZURE_API_KEY')
     AZURE_ENDPOINT = os.environ.get('AZURE_ENDPOINT', 'https://cuhk-apip.azure-api.net')
     AZURE_MODEL = os.environ.get('AZURE_MODEL', 'gpt-4o-mini')
-    API_VERSION = os.environ.get('API_VERSION', '2023-05-15')  # CUHK uses 2023-05-15
+    API_VERSION = os.environ.get('API_VERSION', '2023-05-15')
     
     # DeepSeek API Configuration
-    # Recommended model: 'deepseek-chat' (best balance of cost, speed, quality)
-    # Alternatives: 'deepseek-reasoner' (better reasoning, higher cost), 'deepseek-v3' (latest, most powerful)
     DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY')
-    DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')  # Recommended: deepseek-chat
+    DEEPSEEK_MODEL = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
     DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://www.chataiapi.com')
     
     # LLM Parameters
     LLM_MAX_TOKENS = int(os.environ.get('LLM_MAX_TOKENS', '500'))
     LLM_TEMPERATURE = float(os.environ.get('LLM_TEMPERATURE', '0.7'))
-    LLM_AUGMENTATION_FACTOR = int(os.environ.get('LLM_AUGMENTATION_FACTOR', '5'))
     LLM_BATCH_SIZE = int(os.environ.get('LLM_BATCH_SIZE', '10'))
     
     # Network/Timeout Configuration
-    LLM_TIMEOUT = int(os.environ.get('LLM_TIMEOUT', '120'))  # 120 seconds timeout
-    LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '3'))  # Max retry attempts
-    LLM_RETRY_DELAY = int(os.environ.get('LLM_RETRY_DELAY', '5'))  # Initial retry delay in seconds
-    
-    # Cost Control
-    LLM_MAX_SAMPLES = int(os.environ.get('LLM_MAX_SAMPLES', '50'))
-    LLM_ENABLE_CACHE = os.environ.get('LLM_ENABLE_CACHE', 'true').lower() == 'true'
-    LLM_CACHE_PATH = os.path.join(PROJECT_ROOT, 'data', 'llm_cache.pkl')
+    LLM_TIMEOUT = int(os.environ.get('LLM_TIMEOUT', '120'))
+    LLM_MAX_RETRIES = int(os.environ.get('LLM_MAX_RETRIES', '3'))
+    LLM_RETRY_DELAY = int(os.environ.get('LLM_RETRY_DELAY', '5'))
     
     # Enable/Disable LLM
     USE_LLM = os.environ.get('USE_LLM', 'false').lower() == 'true'

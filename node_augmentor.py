@@ -1,32 +1,17 @@
-"""
-Node-Level Augmentation Module for SeAug Framework (Stage 3)
+"""Node-Level Augmentation Module for SeAug Framework"""
 
-This module implements node-level LLM augmentation and LM encoding.
-Unlike graph-level augmentation, this enhances individual nodes' features.
-
-Pipeline:
-1. Extract text from selected nodes
-2. Use LLM to generate enhanced/paraphrased versions
-3. Use Language Model (BERT/RoBERTa) to encode enhanced text
-4. Attach augmented features to nodes
-"""
-
-import os
 import time
 import numpy as np
 import torch
 from torch_geometric.data import Data
-from typing import List, Tuple, Dict, Optional
+from typing import List, Dict
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
 from config import Config
-
-# Import transformers for LM encoding (required)
 from transformers import AutoTokenizer, AutoModel
 
-# Import LLM client
 try:
     from openai import AzureOpenAI, OpenAI
     from openai import APITimeoutError, APIConnectionError, APIError
@@ -35,33 +20,27 @@ try:
         HTTPX_AVAILABLE = True
     except ImportError:
         HTTPX_AVAILABLE = False
+    try:
+        import httpcore
+        HTTPCORE_AVAILABLE = True
+    except ImportError:
+        HTTPCORE_AVAILABLE = False
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
     HTTPX_AVAILABLE = False
-    print("⚠️  Warning: openai package not installed. LLM augmentation disabled.")
+    HTTPCORE_AVAILABLE = False
+    print("Warning: openai package not installed. LLM augmentation disabled.")
 
 
 class LanguageModelEncoder:
-    """
-    Encode text using pre-trained language models (BERT, RoBERTa, etc.)
-    """
+    """Encode text using pre-trained language models"""
     
     def __init__(
         self,
         model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
         device: str = None
     ):
-        """
-        Initialize Language Model Encoder
-        
-        Args:
-            model_name: HuggingFace model name
-                - "sentence-transformers/all-MiniLM-L6-v2": Fast, 384-dim
-                - "bert-base-uncased": Standard BERT, 768-dim
-                - "roberta-base": RoBERTa, 768-dim
-            device: Device to use ('cuda' or 'cpu')
-        """
         self.model_name = model_name
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -71,33 +50,16 @@ class LanguageModelEncoder:
         self.model.to(self.device)
         self.model.eval()
         
-        # Get embedding dimension
         with torch.no_grad():
-            dummy_input = self.tokenizer("test", return_tensors="pt", 
-                                        padding=True, truncation=True)
+            dummy_input = self.tokenizer("test", return_tensors="pt", padding=True, truncation=True)
             dummy_input = {k: v.to(self.device) for k, v in dummy_input.items()}
             dummy_output = self.model(**dummy_input)
             self.embedding_dim = dummy_output.last_hidden_state.shape[-1]
         
-        print(f"✓ Language Model loaded successfully")
-        print(f"  Device: {self.device}")
-        print(f"  Embedding dimension: {self.embedding_dim}")
+        print(f"Language Model loaded: {self.device}, dim={self.embedding_dim}")
     
-    def encode(
-        self,
-        texts: List[str],
-        batch_size: int = 32
-    ) -> np.ndarray:
-        """
-        Encode texts to embeddings
-        
-        Args:
-            texts: List of text strings
-            batch_size: Batch size for encoding
-        
-        Returns:
-            embeddings: numpy array [num_texts, embedding_dim]
-        """
+    def encode(self, texts: List[str], batch_size: int = 32) -> np.ndarray:
+        """Encode texts to embeddings"""
         embeddings = []
         
         # Process in batches
@@ -135,10 +97,6 @@ class LanguageModelEncoder:
 
 
 class NodeAugmentor:
-    """
-    Node-level LLM augmentation and LM encoding
-    """
-    
     def __init__(
         self,
         lm_encoder: LanguageModelEncoder = None,
@@ -149,20 +107,6 @@ class NodeAugmentor:
         max_tokens: int = None,
         batch_size: int = None
     ):
-        """
-        Initialize Node Augmentor
-        
-        Args:
-            lm_encoder: Language Model encoder instance
-            use_llm: Whether to use LLM for augmentation (defaults to Config.USE_LLM)
-            api_key: API key (optional, defaults to Config.AZURE_API_KEY or Config.DEEPSEEK_API_KEY based on LLM_PROVIDER)
-            model: Model name (optional, defaults to Config.AZURE_MODEL or Config.DEEPSEEK_MODEL based on LLM_PROVIDER)
-            temperature: Generation temperature (defaults to Config.LLM_TEMPERATURE)
-            max_tokens: Max tokens per generation (defaults to Config.LLM_MAX_TOKENS)
-            batch_size: Number of nodes per API call (defaults to Config.LLM_BATCH_SIZE)
-        
-        Note: Supports both Azure OpenAI and DeepSeek providers. Set LLM_PROVIDER in config to switch.
-        """
         # Initialize LM encoder
         if lm_encoder is None:
             self.lm_encoder = LanguageModelEncoder()
@@ -192,96 +136,60 @@ class NodeAugmentor:
         }
     
     def _init_llm_client(self, api_key: str = None, model: str = None):
-        """Initialize LLM client - supports Azure OpenAI and DeepSeek"""
-        provider = None
         try:
             provider = Config.LLM_PROVIDER.lower()
+            connect_timeout = 30.0
+            timeout = (connect_timeout, Config.LLM_TIMEOUT)
             
             if provider == 'deepseek':
-                # DeepSeek API (OpenAI-compatible)
                 if not Config.DEEPSEEK_API_KEY:
                     raise ValueError("DEEPSEEK_API_KEY is not set. Please configure it in your .env file.")
                 
                 self.provider = 'deepseek'
                 self.api_key = api_key or Config.DEEPSEEK_API_KEY
                 self.model = model or Config.DEEPSEEK_MODEL
-                
-                # Ensure base URL ends with /v1 for OpenAI-compatible APIs
                 base_url = Config.DEEPSEEK_BASE_URL.rstrip('/')
                 if not base_url.endswith('/v1'):
                     base_url = f"{base_url}/v1"
                 self.base_url = base_url
                 
-                # Use OpenAI SDK (DeepSeek is OpenAI-compatible)
-                from openai import OpenAI
-                # Configure timeout to prevent hanging (connect_timeout, read_timeout)
-                timeout = (10.0, Config.LLM_TIMEOUT)
-                self.client = OpenAI(
-                    api_key=self.api_key,
-                    base_url=self.base_url,
-                    timeout=timeout
-                )
-                print(f"✓ LLM Client initialized (DeepSeek)")
-                print(f"  Model: {self.model}")
-                print(f"  Base URL: {self.base_url}")
+                self.client = OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=timeout)
+                print(f"LLM Client initialized (DeepSeek): {self.model}")
                 
             elif provider == 'azure':
-                # Azure OpenAI API
                 if not Config.AZURE_API_KEY:
                     raise ValueError("AZURE_API_KEY is not set. Please configure it in your .env file.")
                 
                 self.provider = 'azure'
-                self.use_apim = True
                 self.api_key = api_key or Config.AZURE_API_KEY
                 self.endpoint = Config.AZURE_ENDPOINT
                 self.model = model or Config.AZURE_MODEL
                 self.api_version = Config.API_VERSION
                 
-                # Use AzureOpenAI SDK
-                from openai import AzureOpenAI
-                # Configure timeout to prevent hanging (connect_timeout, read_timeout)
-                timeout = (10.0, Config.LLM_TIMEOUT)
                 self.client = AzureOpenAI(
                     azure_endpoint=self.endpoint,
                     api_version=self.api_version,
                     api_key=self.api_key,
                     timeout=timeout
                 )
-                print(f"✓ LLM Client initialized (Azure OpenAI)")
-                print(f"  Model: {self.model}")
-                print(f"  Endpoint: {self.endpoint}")
+                print(f"LLM Client initialized (Azure OpenAI): {self.model}")
             else:
                 raise ValueError(f"Unknown LLM provider: {provider}. Use 'azure' or 'deepseek'.")
             
         except Exception as e:
-            print(f"⚠️  Error initializing LLM: {e}")
-            if provider == 'deepseek':
-                print(f"   Make sure DEEPSEEK_API_KEY is set in your .env file")
-            elif provider == 'azure':
-                print(f"   Make sure AZURE_API_KEY is set in your .env file")
-            else:
-                print(f"   Make sure LLM_PROVIDER is set to 'azure' or 'deepseek' in your .env file")
+            print(f"Error initializing LLM: {e}")
             self.use_llm = False
     
     def _call_llm(self, prompt: str, retry_count: int = 0) -> str:
-        """
-        Call LLM API with retry logic for network/SSL errors
-        
-        Args:
-            prompt: The prompt to send to the LLM
-            retry_count: Current retry attempt (internal use)
-        """
         if not self.use_llm:
             return None
         
-        # Check cache first
         cache_key = hash(prompt)
         if cache_key in self.cache:
             self.stats['cache_hits'] += 1
             return self.cache[cache_key]
         
         try:
-            # Make API call
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -292,136 +200,82 @@ class NodeAugmentor:
                 temperature=self.temperature
             )
             
-            # Check if response is valid
-            if isinstance(response, str):
-                raise ValueError(f"API returned string instead of object: {response[:200]}")
-            
-            if not hasattr(response, 'choices'):
-                # Try to get more info about the response
-                response_str = str(response)
-                if len(response_str) > 500:
-                    response_str = response_str[:500] + "..."
-                raise ValueError(f"Response missing 'choices' attribute. Type: {type(response)}, Response: {response_str}")
-            
-            if not response.choices or len(response.choices) == 0:
+            if not response.choices:
                 raise ValueError("Response has no choices")
             
             text = response.choices[0].message.content.strip()
-            
-            # Cache result
             self.cache[cache_key] = text
             self.stats['llm_calls'] += 1
-            
             return text
             
-        except (APITimeoutError, APIConnectionError) as e:
-            # Network/SSL/Connection errors from OpenAI SDK - retry with exponential backoff
+        except (APITimeoutError, APIConnectionError, ConnectionError, OSError) as e:
             self.stats['network_errors'] += 1
-            
-            if retry_count < Config.LLM_MAX_RETRIES:
-                delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)  # Exponential backoff
-                self.stats['retries'] += 1
-                print(f"⚠️  Network/SSL error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {type(e).__name__}")
-                print(f"   → Retrying in {delay} seconds...")
-                time.sleep(delay)
-                return self._call_llm(prompt, retry_count + 1)
-            else:
-                print(f"⚠️  Network/SSL error after {Config.LLM_MAX_RETRIES} retries: {e}")
-                print(f"   → Skipping this request")
-                return None
-                
-        except (ConnectionError, OSError) as e:
-            # General connection/SSL errors - retry with exponential backoff
-            self.stats['network_errors'] += 1
-            
             if retry_count < Config.LLM_MAX_RETRIES:
                 delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)
                 self.stats['retries'] += 1
-                print(f"⚠️  Connection error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {type(e).__name__}")
-                print(f"   → Retrying in {delay} seconds...")
+                print(f"Network error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {type(e).__name__}")
                 time.sleep(delay)
                 return self._call_llm(prompt, retry_count + 1)
             else:
-                print(f"⚠️  Connection error after {Config.LLM_MAX_RETRIES} retries: {e}")
-                print(f"   → Skipping this request")
+                print(f"Network error after {Config.LLM_MAX_RETRIES} retries: {e}")
                 return None
             
         except APIError as e:
             error_str = str(e)
-            
-            # Handle quota exceeded (403)
             if "403" in error_str or "quota" in error_str.lower():
-                print(f"⚠️  Quota exceeded: {e}")
+                print(f"Quota exceeded: {e}")
                 self.stats['quota_exceeded'] += 1
-                # Disable LLM for remaining calls
-                print("   → Disabling LLM for remaining nodes")
                 self.use_llm = False
                 return None
-            
-            # Handle rate limit (429)
             elif "429" in error_str or "rate limit" in error_str.lower():
-                print(f"⚠️  Rate limit hit: {e}")
                 self.stats['rate_limited'] += 1
                 if retry_count < Config.LLM_MAX_RETRIES:
-                    delay = 60  # Wait 1 minute for rate limits
+                    delay = 60
                     self.stats['retries'] += 1
-                    print(f"   → Retrying in {delay} seconds...")
+                    print(f"Rate limit hit, retrying in {delay} seconds...")
                     time.sleep(delay)
                     return self._call_llm(prompt, retry_count + 1)
                 else:
-                    print(f"   → Max retries reached, skipping")
                     return None
-            
             else:
-                print(f"⚠️  LLM API error: {e}")
+                print(f"LLM API error: {e}")
                 return None
                 
         except Exception as e:
-            # Catch-all for other errors (including httpx timeouts if available)
-            error_str = str(e)
+            error_str = str(e).lower()
             error_type = type(e).__name__
+            is_network_error = any(kw in error_str for kw in ['ssl', 'socket', 'connection', 'timeout', 'network', 'read', 'httpcore', 'httpx'])
             
-            # Check if it's an httpx timeout error (if httpx is available)
-            if HTTPX_AVAILABLE and isinstance(e, (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.TimeoutException)):
+            if HTTPCORE_AVAILABLE:
+                try:
+                    if isinstance(e, (httpcore.ReadError, httpcore.ConnectError, httpcore.NetworkError, 
+                                      httpcore.ReadTimeout, httpcore.ConnectTimeout)):
+                        is_network_error = True
+                except (AttributeError, NameError):
+                    pass
+            if HTTPX_AVAILABLE:
+                try:
+                    if isinstance(e, (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.NetworkError)):
+                        is_network_error = True
+                except (AttributeError, NameError):
+                    pass
+            
+            if is_network_error:
                 self.stats['network_errors'] += 1
                 if retry_count < Config.LLM_MAX_RETRIES:
                     delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)
                     self.stats['retries'] += 1
-                    print(f"⚠️  Timeout error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {error_type}")
-                    print(f"   → Retrying in {delay} seconds...")
+                    print(f"Network error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {error_type}")
                     time.sleep(delay)
                     return self._call_llm(prompt, retry_count + 1)
                 else:
-                    print(f"⚠️  Timeout error after {Config.LLM_MAX_RETRIES} retries: {e}")
-                    return None
-            
-            # Check if it's a network-related error by error message
-            elif any(keyword in error_str.lower() for keyword in ['ssl', 'socket', 'connection', 'timeout', 'network', 'read']):
-                self.stats['network_errors'] += 1
-                if retry_count < Config.LLM_MAX_RETRIES:
-                    delay = Config.LLM_RETRY_DELAY * (2 ** retry_count)
-                    self.stats['retries'] += 1
-                    print(f"⚠️  Network-related error (attempt {retry_count + 1}/{Config.LLM_MAX_RETRIES}): {error_type}")
-                    print(f"   → Retrying in {delay} seconds...")
-                    time.sleep(delay)
-                    return self._call_llm(prompt, retry_count + 1)
-                else:
-                    print(f"⚠️  Network error after {Config.LLM_MAX_RETRIES} retries: {error_type}: {e}")
-                    return None
+                    print(f"Network error after {Config.LLM_MAX_RETRIES} retries: {error_type}")
+                return None
             else:
-                print(f"⚠️  LLM call failed: {error_type}: {e}")
+                print(f"LLM call failed: {error_type}: {e}")
                 return None
     
     def augment_node_text(self, text: str) -> str:
-        """
-        Augment a single node's text using LLM
-        
-        Args:
-            text: Original text
-        
-        Returns:
-            Augmented text (or original if augmentation fails)
-        """
         if not self.use_llm or not text or len(text) < 5:
             return text
         
@@ -435,25 +289,6 @@ Paraphrased version (one line only):"""
         return augmented if augmented else text
     
     def augment_batch_texts(self, texts: List[str], batch_size: int = None) -> List[str]:
-        """
-        Augment multiple texts in batched API calls (TOKEN EFFICIENT!)
-        
-        This method batches multiple nodes together in single API calls,
-        significantly reducing token usage by sharing system prompt and
-        instructions across multiple texts.
-        
-        Token savings example:
-        - Individual calls (20 nodes): ~2,600 tokens, 20 API calls
-        - Batched call (20 nodes): ~1,080 tokens, 1 API call
-        - Savings: 58% tokens, 95% fewer API calls!
-        
-        Args:
-            texts: List of texts to augment
-            batch_size: Number of texts per API call (defaults to self.batch_size, recommended: 10-20)
-        
-        Returns:
-            List of augmented texts (same length as input)
-        """
         if batch_size is None:
             batch_size = self.batch_size
         if not self.use_llm or not texts:
@@ -506,15 +341,6 @@ Paraphrased version (one line only):"""
         return augmented_results
     
     def _create_batch_prompt(self, texts: List[str]) -> str:
-        """
-        Create a batched prompt for multiple texts
-        
-        Args:
-            texts: List of texts to augment
-        
-        Returns:
-            Formatted prompt string
-        """
         # Create numbered list of texts
         text_list = "\n".join([f"{i+1}. \"{text}\"" for i, text in enumerate(texts)])
         
@@ -529,16 +355,6 @@ Paraphrased versions (one per line, no numbering):"""
         return prompt
     
     def _parse_batch_response(self, response: str, expected_count: int) -> List[str]:
-        """
-        Parse batched LLM response into individual texts
-        
-        Args:
-            response: LLM response containing multiple paraphrased texts
-            expected_count: Expected number of texts
-        
-        Returns:
-            List of parsed texts
-        """
         import re
         
         # Split by newlines and clean up
@@ -568,36 +384,17 @@ Paraphrased versions (one per line, no numbering):"""
         use_batching: bool = True,
         batch_size: int = None
     ) -> Data:
-        """
-        Augment selected nodes in a graph
-        
-        Args:
-            data: Original PyG Data object
-            selected_node_indices: Indices of nodes to augment
-            node_texts: Original texts for each node (if available)
-            use_batching: If True, batch multiple nodes in single API calls (RECOMMENDED)
-            batch_size: Number of nodes per API call (defaults to self.batch_size, recommended: 10-20)
-        
-        Returns:
-            Augmented Data object with x_aug field
-        """
         if batch_size is None:
             batch_size = self.batch_size
         num_nodes = data.x.shape[0]
         
-        # If no texts provided, create dummy texts
         if node_texts is None:
             node_texts = [f"Node {i} placeholder text" for i in range(num_nodes)]
         
-        # Augment selected nodes using BATCHED approach (token efficient!)
         if use_batching and self.use_llm and len(selected_node_indices) > 0:
-            # Collect texts for selected nodes only
             selected_texts = [node_texts[i] for i in selected_node_indices]
-            
-            # Batch augment selected texts (saves tokens!)
             augmented_selected = self.augment_batch_texts(selected_texts, batch_size=batch_size)
             
-            # Create final text list with augmented texts in correct positions
             augmented_texts = []
             selected_idx = 0
             for i in range(num_nodes):
@@ -608,27 +405,18 @@ Paraphrased versions (one per line, no numbering):"""
                 else:
                     augmented_texts.append(node_texts[i])
         else:
-            # Fallback to individual augmentation (old method, less efficient)
             augmented_texts = []
             for i in range(num_nodes):
                 if i in selected_node_indices:
-                    # Augment this node individually
-                    original_text = node_texts[i]
-                    augmented_text = self.augment_node_text(original_text)
-                    augmented_texts.append(augmented_text)
+                    augmented_texts.append(self.augment_node_text(node_texts[i]))
                     self.stats['nodes_augmented'] += 1
                 else:
-                    # Keep original
                     augmented_texts.append(node_texts[i])
         
-        # Encode all texts to embeddings
         embeddings = self.lm_encoder.encode(augmented_texts)
-        
-        # Create augmented data
         data_aug = data.clone()
         data_aug.x_aug = torch.FloatTensor(embeddings)
         data_aug.augmented_node_mask = torch.zeros(num_nodes, dtype=torch.bool)
-        # Convert to list to avoid negative stride issues with numpy arrays
         if isinstance(selected_node_indices, np.ndarray):
             selected_node_indices = selected_node_indices.copy()
         data_aug.augmented_node_mask[selected_node_indices] = True
@@ -643,19 +431,6 @@ Paraphrased versions (one per line, no numbering):"""
         verbose: bool = True,
         batch_size: int = None
     ) -> List[Data]:
-        """
-        Augment a batch of graphs with batched API calls
-        
-        Args:
-            graph_list: List of PyG Data objects
-            selected_nodes_list: List of selected node indices for each graph
-            texts_list: List of node texts for each graph
-            verbose: Show progress bar
-            batch_size: Number of nodes per API call (defaults to self.batch_size)
-        
-        Returns:
-            List of augmented Data objects
-        """
         if batch_size is None:
             batch_size = self.batch_size
         augmented_graphs = []
@@ -679,5 +454,4 @@ Paraphrased versions (one per line, no numbering):"""
         return augmented_graphs
     
     def get_statistics(self) -> Dict:
-        """Get augmentation statistics"""
         return self.stats.copy()
