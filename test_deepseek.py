@@ -57,27 +57,61 @@ def test_api_connection():
     try:
         from openai import OpenAI
         
+        # Ensure base URL ends with /v1 for OpenAI-compatible APIs
+        base_url = Config.DEEPSEEK_BASE_URL.rstrip('/')
+        if not base_url.endswith('/v1'):
+            base_url = f"{base_url}/v1"
+        
         # Initialize client
         client = OpenAI(
             api_key=Config.DEEPSEEK_API_KEY,
-            base_url=Config.DEEPSEEK_BASE_URL
+            base_url=base_url
         )
         
         print(f"\n✓ Client initialized")
         print(f"  Model: {Config.DEEPSEEK_MODEL}")
-        print(f"  Base URL: {Config.DEEPSEEK_BASE_URL}")
+        print(f"  Base URL (original): {Config.DEEPSEEK_BASE_URL}")
+        print(f"  Base URL (adjusted): {base_url}")
         
         # Make a simple test call
         print(f"\n📡 Making test API call...")
-        response = client.chat.completions.create(
-            model=Config.DEEPSEEK_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": "Say 'Hello, DeepSeek is working!' in one sentence."}
-            ],
-            max_tokens=50,
-            temperature=0.7
-        )
+        try:
+            response = client.chat.completions.create(
+                model=Config.DEEPSEEK_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "Say 'Hello, DeepSeek is working!' in one sentence."}
+                ],
+                max_tokens=50,
+                temperature=0.7
+            )
+        except Exception as api_error:
+            print(f"\n✗ API Call Failed with exception!")
+            print(f"   Error type: {type(api_error).__name__}")
+            print(f"   Error message: {str(api_error)}")
+            if hasattr(api_error, 'response'):
+                print(f"   Response status: {getattr(api_error.response, 'status_code', 'N/A')}")
+                if hasattr(api_error.response, 'text'):
+                    print(f"   Response text: {api_error.response.text[:500]}")
+            raise
+        
+        # Debug: Check response type
+        print(f"   Response type: {type(response)}")
+        if isinstance(response, str):
+            print(f"   Response is a string: {response[:200]}")
+            raise ValueError(f"API returned string instead of object: {response[:200]}")
+        
+        # Check if response has expected attributes
+        if not hasattr(response, 'choices'):
+            response_str = str(response)
+            if len(response_str) > 500:
+                response_str = response_str[:500] + "..."
+            print(f"   Response attributes: {dir(response)[:15]}")
+            print(f"   Response content: {response_str}")
+            raise ValueError(f"Response object missing 'choices' attribute. Type: {type(response)}")
+        
+        if not response.choices or len(response.choices) == 0:
+            raise ValueError("Response has no choices")
         
         result = response.choices[0].message.content.strip()
         print(f"\n✓ API Call Successful!")

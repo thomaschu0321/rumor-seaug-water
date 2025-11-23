@@ -192,7 +192,12 @@ class NodeAugmentor:
                 self.provider = 'deepseek'
                 self.api_key = api_key or Config.DEEPSEEK_API_KEY
                 self.model = model or Config.DEEPSEEK_MODEL
-                self.base_url = Config.DEEPSEEK_BASE_URL
+                
+                # Ensure base URL ends with /v1 for OpenAI-compatible APIs
+                base_url = Config.DEEPSEEK_BASE_URL.rstrip('/')
+                if not base_url.endswith('/v1'):
+                    base_url = f"{base_url}/v1"
+                self.base_url = base_url
                 
                 # Use OpenAI SDK (DeepSeek is OpenAI-compatible)
                 from openai import OpenAI
@@ -203,7 +208,6 @@ class NodeAugmentor:
                 print(f"✓ LLM Client initialized (DeepSeek)")
                 print(f"  Model: {self.model}")
                 print(f"  Base URL: {self.base_url}")
-                print(f"  💡 Recommended: deepseek-chat (best balance of cost/speed/quality)")
                 
             elif provider == 'azure':
                 # Azure OpenAI API
@@ -262,6 +266,21 @@ class NodeAugmentor:
                 max_tokens=self.max_tokens,
                 temperature=self.temperature
             )
+            
+            # Check if response is valid
+            if isinstance(response, str):
+                raise ValueError(f"API returned string instead of object: {response[:200]}")
+            
+            if not hasattr(response, 'choices'):
+                # Try to get more info about the response
+                response_str = str(response)
+                if len(response_str) > 500:
+                    response_str = response_str[:500] + "..."
+                raise ValueError(f"Response missing 'choices' attribute. Type: {type(response)}, Response: {response_str}")
+            
+            if not response.choices or len(response.choices) == 0:
+                raise ValueError("Response has no choices")
+            
             text = response.choices[0].message.content.strip()
             
             # Cache result
