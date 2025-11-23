@@ -28,7 +28,7 @@ from transformers import AutoTokenizer, AutoModel
 
 # Import LLM client
 try:
-    from openai import AzureOpenAI
+    from openai import AzureOpenAI, OpenAI
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
@@ -147,10 +147,12 @@ class NodeAugmentor:
         Args:
             lm_encoder: Language Model encoder instance
             use_llm: Whether to use LLM for augmentation
-            api_key: Azure OpenAI API key (optional, defaults to Config.AZURE_API_KEY)
-            model: Model name (optional, defaults to Config.AZURE_MODEL)
+            api_key: API key (optional, defaults to Config.AZURE_API_KEY or Config.DEEPSEEK_API_KEY based on LLM_PROVIDER)
+            model: Model name (optional, defaults to Config.AZURE_MODEL or Config.DEEPSEEK_MODEL based on LLM_PROVIDER)
             temperature: Generation temperature
             max_tokens: Max tokens per generation
+        
+        Note: Supports both Azure OpenAI and DeepSeek providers. Set LLM_PROVIDER in config to switch.
         """
         # Initialize LM encoder
         if lm_encoder is None:
@@ -177,32 +179,65 @@ class NodeAugmentor:
         }
     
     def _init_llm_client(self, api_key: str = None, model: str = None):
-        """Initialize LLM client - Azure OpenAI only"""
+        """Initialize LLM client - supports Azure OpenAI and DeepSeek"""
+        provider = None
         try:
-            # Use Azure OpenAI API only
-            if not Config.AZURE_API_KEY:
-                raise ValueError("AZURE_API_KEY is not set. Please configure it in your .env file.")
+            provider = Config.LLM_PROVIDER.lower()
             
-            self.use_apim = True
-            self.api_key = api_key or Config.AZURE_API_KEY
-            self.endpoint = Config.AZURE_ENDPOINT
-            self.model = model or Config.AZURE_MODEL
-            self.api_version = Config.API_VERSION
-            
-            # Use AzureOpenAI SDK
-            from openai import AzureOpenAI
-            self.client = AzureOpenAI(
-                azure_endpoint=self.endpoint,
-                api_version=self.api_version,
-                api_key=self.api_key
-            )
-            print(f"✓ LLM Client initialized (Azure OpenAI)")
-            print(f"  Model: {self.model}")
-            print(f"  Endpoint: {self.endpoint}")
+            if provider == 'deepseek':
+                # DeepSeek API (OpenAI-compatible)
+                if not Config.DEEPSEEK_API_KEY:
+                    raise ValueError("DEEPSEEK_API_KEY is not set. Please configure it in your .env file.")
+                
+                self.provider = 'deepseek'
+                self.api_key = api_key or Config.DEEPSEEK_API_KEY
+                self.model = model or Config.DEEPSEEK_MODEL
+                self.base_url = Config.DEEPSEEK_BASE_URL
+                
+                # Use OpenAI SDK (DeepSeek is OpenAI-compatible)
+                from openai import OpenAI
+                self.client = OpenAI(
+                    api_key=self.api_key,
+                    base_url=self.base_url
+                )
+                print(f"✓ LLM Client initialized (DeepSeek)")
+                print(f"  Model: {self.model}")
+                print(f"  Base URL: {self.base_url}")
+                print(f"  💡 Recommended: deepseek-chat (best balance of cost/speed/quality)")
+                
+            elif provider == 'azure':
+                # Azure OpenAI API
+                if not Config.AZURE_API_KEY:
+                    raise ValueError("AZURE_API_KEY is not set. Please configure it in your .env file.")
+                
+                self.provider = 'azure'
+                self.use_apim = True
+                self.api_key = api_key or Config.AZURE_API_KEY
+                self.endpoint = Config.AZURE_ENDPOINT
+                self.model = model or Config.AZURE_MODEL
+                self.api_version = Config.API_VERSION
+                
+                # Use AzureOpenAI SDK
+                from openai import AzureOpenAI
+                self.client = AzureOpenAI(
+                    azure_endpoint=self.endpoint,
+                    api_version=self.api_version,
+                    api_key=self.api_key
+                )
+                print(f"✓ LLM Client initialized (Azure OpenAI)")
+                print(f"  Model: {self.model}")
+                print(f"  Endpoint: {self.endpoint}")
+            else:
+                raise ValueError(f"Unknown LLM provider: {provider}. Use 'azure' or 'deepseek'.")
             
         except Exception as e:
             print(f"⚠️  Error initializing LLM: {e}")
-            print(f"   Make sure AZURE_API_KEY is set in your .env file")
+            if provider == 'deepseek':
+                print(f"   Make sure DEEPSEEK_API_KEY is set in your .env file")
+            elif provider == 'azure':
+                print(f"   Make sure AZURE_API_KEY is set in your .env file")
+            else:
+                print(f"   Make sure LLM_PROVIDER is set to 'azure' or 'deepseek' in your .env file")
             self.use_llm = False
     
     def _call_llm(self, prompt: str) -> str:
@@ -520,63 +555,3 @@ Paraphrased versions (one per line, no numbering):"""
     def get_statistics(self) -> Dict:
         """Get augmentation statistics"""
         return self.stats.copy()
-
-
-if __name__ == '__main__':
-    print("="*70)
-    print("Testing Node Augmentor")
-    print("="*70)
-    
-    # Test LM Encoder
-    print("\n1. Testing Language Model Encoder...")
-    encoder = LanguageModelEncoder()
-    
-    texts = [
-        "This is a rumor about a celebrity.",
-        "Breaking news: earthquake reported.",
-        "Just saw something interesting today."
-    ]
-    
-    embeddings = encoder.encode(texts)
-    print(f"✓ Encoded {len(texts)} texts")
-    print(f"  Embedding shape: {embeddings.shape}")
-    print(f"  Embedding dimension: {encoder.embedding_dim}")
-    
-    # Test Node Augmentor
-    print("\n2. Testing Node Augmentor...")
-    augmentor = NodeAugmentor(lm_encoder=encoder, use_llm=False)  # Disable LLM for testing
-    
-    # Create dummy graph
-    x = torch.randn(5, 768)  # BERT feature dimension
-    edge_index = torch.tensor([[0, 0, 1, 2], [1, 2, 3, 4]], dtype=torch.long)
-    data = Data(x=x, edge_index=edge_index, y=torch.tensor([1]))
-    
-    # Select nodes 1, 3 for augmentation
-    selected_nodes = np.array([1, 3])
-    node_texts = [
-        "Root post about an event",
-        "Reply expressing doubt",
-        "Another reply agreeing",
-        "Third reply with questions",
-        "Final reply sharing link"
-    ]
-    
-    # Augment
-    data_aug = augmentor.augment_graph_nodes(data, selected_nodes, node_texts)
-    
-    print(f"✓ Graph augmented")
-    print(f"  Original features: {data.x.shape}")
-    print(f"  Augmented features: {data_aug.x_aug.shape}")
-    print(f"  Augmented node mask: {data_aug.augmented_node_mask}")
-    print(f"  Selected nodes: {selected_nodes}")
-    
-    # Statistics
-    stats = augmentor.get_statistics()
-    print(f"\nAugmentation Statistics:")
-    for key, value in stats.items():
-        print(f"  {key}: {value}")
-    
-    print("\n" + "="*70)
-    print("✓ Node Augmentor test completed!")
-    print("="*70)
-

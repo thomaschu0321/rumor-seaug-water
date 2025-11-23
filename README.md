@@ -46,13 +46,32 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available()); pr
 
 For LLM augmentation (optional but recommended), create a `.env` file in the project root:
 
+**Option 1: Azure OpenAI (CUHK-style)**
 ```bash
+# LLM Provider Selection
+LLM_PROVIDER=azure
+
 # Azure OpenAI API Configuration
 AZURE_API_KEY=your_api_key_here
 AZURE_ENDPOINT=https://cuhk-apip.azure-api.net
 AZURE_MODEL=gpt-4o-mini
 API_VERSION=2023-05-15
+```
 
+**Option 2: DeepSeek (Recommended - Cost-Effective)**
+```bash
+# LLM Provider Selection
+LLM_PROVIDER=deepseek
+
+# DeepSeek API Configuration
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+DEEPSEEK_MODEL=deepseek-chat  # Recommended: best balance of cost/speed/quality
+# Alternative models: deepseek-reasoner (better reasoning), deepseek-v3 (latest)
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+**Common LLM Parameters (for both providers)**
+```bash
 # Optional LLM parameters
 LLM_MAX_TOKENS=500
 LLM_TEMPERATURE=0.7
@@ -60,7 +79,11 @@ LLM_BATCH_SIZE=20
 USE_LLM=true
 ```
 
-**Note**: The project uses Azure OpenAI API for node-level text augmentation. If you don't have API access, the pipeline will still work but augmentation will be disabled.
+**Provider Comparison**:
+- **Azure OpenAI**: Enterprise-grade, CUHK API endpoint support
+- **DeepSeek**: Cost-effective (~$0.14/$0.28 per 1M tokens), fast, OpenAI-compatible API
+
+**Note**: The project supports both Azure OpenAI and DeepSeek APIs for node-level text augmentation. Set `LLM_PROVIDER=azure` or `LLM_PROVIDER=deepseek` in your `.env` file. If you don't have API access, the pipeline will still work but augmentation will be disabled.
 
 ---
 
@@ -224,7 +247,7 @@ NUM_CLASSES = 2               # Binary classification (non-rumor vs rumor)
 
 # Phase 3: LM Augmentation
 # - Model: sentence-transformers/all-MiniLM-L6-v2 (384-dim)
-# - LLM: Azure OpenAI (gpt-4o-mini)
+# - LLM: Azure OpenAI (gpt-4o-mini) or DeepSeek (deepseek-chat) - configurable via LLM_PROVIDER
 # - Batch size: 20 nodes per API call (token-efficient)
 
 # Phase 4: Feature Fusion & GNN
