@@ -494,34 +494,103 @@ Paraphrased versions (one per line, no numbering):"""
         if verbose:
             print(f"    Using LLM batch_size={batch_size} (from {'parameter' if batch_size != self.batch_size else 'Config.LLM_BATCH_SIZE'})")
         
-        augmented_graphs = []
-        
         total_nodes_to_augment = sum(len(nodes) for nodes in selected_nodes_list)
-        nodes_processed = 0
         initial_stats = self.stats.copy()
         
-        iterator = zip(graph_list, selected_nodes_list)
+        if total_nodes_to_augment == 0:
+            if verbose:
+                print("    No nodes to augment, returning original graphs")
+            return [data.clone() for data in graph_list]
+        
+        # Stage 1: Collect all nodes from all graphs with metadata
+        if verbose:
+            print(f"    Collecting {total_nodes_to_augment:,} nodes from {len(graph_list)} graphs...")
+        
+        node_items = []  # List of (graph_idx, node_idx, text) tuples
+        graph_node_texts = {}  # Store all node texts per graph for later use
+        
+        for graph_idx, (data, selected_indices) in enumerate(zip(graph_list, selected_nodes_list)):
+            num_nodes = data.x.shape[0]
+            
+            # Get node texts for this graph
+            if texts_list and texts_list[graph_idx]:
+                node_texts = texts_list[graph_idx]
+            else:
+                # Use placeholder if texts not provided
+                node_texts = [f"Node {i} placeholder text" for i in range(num_nodes)]
+            
+            graph_node_texts[graph_idx] = node_texts.copy()
+            
+            # Collect selected nodes
+            for node_idx in selected_indices:
+                text = node_texts[node_idx]
+                node_items.append((graph_idx, node_idx, text))
+        
+        # Stage 2: Batch all texts together across graphs
+        if verbose:
+            print(f"    Batching {len(node_items):,} nodes across graphs (batch_size={batch_size})...")
+        
+        all_texts = [item[2] for item in node_items]
+        augmented_texts = self.augment_batch_texts(
+            all_texts, 
+            batch_size=batch_size, 
+            verbose=verbose
+        )
+        
+        # Stage 3: Map augmented texts back to graphs
+        if verbose:
+            print(f"    Mapping augmented texts back to {len(graph_list)} graphs...")
+        
+        # Create mapping: (graph_idx, node_idx) -> augmented_text
+        augmentation_map = {}
+        for (graph_idx, node_idx, _), aug_text in zip(node_items, augmented_texts):
+            augmentation_map[(graph_idx, node_idx)] = aug_text
+        
+        # Stage 4: Create augmented graphs
+        augmented_graphs = []
+        nodes_processed = 0
+        
+        iterator = enumerate(zip(graph_list, selected_nodes_list))
         if verbose:
             iterator = tqdm(iterator, 
                           total=len(graph_list),
-                          desc="Augmenting graphs",
+                          desc="Creating augmented graphs",
                           disable=False)
         
-        for i, (data, selected_indices) in enumerate(iterator):
-            num_selected = len(selected_indices)
-            node_texts = texts_list[i] if texts_list else None
+        for graph_idx, (data, selected_indices) in iterator:
+            num_nodes = data.x.shape[0]
+            node_texts = graph_node_texts[graph_idx]
             
-            data_aug = self.augment_graph_nodes(
-                data, 
-                selected_indices, 
-                node_texts,
-                use_batching=True,
-                batch_size=batch_size,
-                verbose=verbose and num_selected > 0
-            )
+            # Convert selected_indices to set for O(1) lookup
+            if isinstance(selected_indices, np.ndarray):
+                selected_set = set(selected_indices.tolist())
+            else:
+                selected_set = set(selected_indices)
+            
+            # Build augmented texts list
+            augmented_texts_list = []
+            for i in range(num_nodes):
+                if i in selected_set:
+                    aug_text = augmentation_map.get((graph_idx, i), node_texts[i])
+                    augmented_texts_list.append(aug_text)
+                    self.stats['nodes_augmented'] += 1
+                else:
+                    augmented_texts_list.append(node_texts[i])
+            
+            # Encode texts to embeddings
+            encode_verbose = verbose and len(augmented_texts_list) > 100
+            embeddings = self.lm_encoder.encode(augmented_texts_list, verbose=encode_verbose)
+            
+            # Create augmented graph
+            data_aug = data.clone()
+            data_aug.x_aug = torch.FloatTensor(embeddings)
+            data_aug.augmented_node_mask = torch.zeros(num_nodes, dtype=torch.bool)
+            if isinstance(selected_indices, np.ndarray):
+                selected_indices = selected_indices.copy()
+            data_aug.augmented_node_mask[selected_indices] = True
+            
             augmented_graphs.append(data_aug)
-            
-            nodes_processed += num_selected
+            nodes_processed += len(selected_indices)
             
             # Update progress bar with stats
             if verbose and hasattr(iterator, 'set_postfix'):
@@ -540,12 +609,16 @@ Paraphrased versions (one per line, no numbering):"""
         if verbose and total_nodes_to_augment > 0 and total_llm_calls > 0:
             avg_nodes_per_call = total_nodes_to_augment / total_llm_calls
             expected_calls_without_batching = total_nodes_to_augment
+            expected_calls_old_batching = len(graph_list)  # Old way: one call per graph
             batching_efficiency = (1 - total_llm_calls / expected_calls_without_batching) * 100 if expected_calls_without_batching > 0 else 0
+            cross_graph_efficiency = (1 - total_llm_calls / expected_calls_old_batching) * 100 if expected_calls_old_batching > 0 else 0
             print(f"\n    Batching Summary:")
             print(f"      Total nodes: {total_nodes_to_augment:,}")
-            print(f"      LLM API calls: {total_llm_calls:,} (would be {expected_calls_without_batching:,} without batching)")
+            print(f"      Total graphs: {len(graph_list):,}")
+            print(f"      LLM API calls: {total_llm_calls:,} (would be {expected_calls_without_batching:,} without batching, {expected_calls_old_batching:,} with per-graph batching)")
             print(f"      Average nodes per call: {avg_nodes_per_call:.1f} (target: {batch_size})")
-            print(f"      Batching efficiency: {batching_efficiency:.1f}% reduction in API calls")
+            print(f"      Batching efficiency: {batching_efficiency:.1f}% reduction vs no batching")
+            print(f"      Cross-graph efficiency: {cross_graph_efficiency:.1f}% reduction vs per-graph batching")
         
         return augmented_graphs
     
