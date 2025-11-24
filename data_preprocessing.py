@@ -60,17 +60,32 @@ def _extract_node_texts(tree, default_text):
     return texts
 
 
-def _build_processed_filename(dataname, sample_ratio):
+def _slugify_token(token):
+    """Normalize a token for safe filesystem usage."""
+    token = (token or "").strip().lower()
+    for ch in (' ', '/', '\\'):
+        token = token.replace(ch, '-')
+    token = ''.join(c for c in token if c.isalnum() or c in ('-', '_'))
+    return token.strip('-_')
+
+
+def _build_processed_filename(dataname, sample_ratio, detail=None):
     """Return the canonical filename used when caching processed graphs."""
+    base = dataname
+    if detail:
+        detail_slug = _slugify_token(detail)
+        if detail_slug:
+            base = f'{base}_{detail_slug}'
     if sample_ratio == 1.0:
-        return f'{dataname}_processed_bert_full.pkl'
-    return f'{dataname}_processed_bert_sample{sample_ratio}.pkl'
+        return f'{base}_processed_bert_full.pkl'
+    return f'{base}_processed_bert_sample{sample_ratio}.pkl'
 
 
 class TwitterDataProcessor:
     def __init__(self, dataname='Twitter15', feature_dim=768, sample_ratio=1.0):
         self.dataname = dataname
         self.sample_ratio = sample_ratio
+        self.processed_filename = _build_processed_filename(self.dataname, self.sample_ratio)
         
         self.data_path = os.path.join(Config.DATA_DIR, 'Twitter', dataname)
         
@@ -201,8 +216,7 @@ class TwitterDataProcessor:
             save_path = Config.PROCESSED_DIR
         os.makedirs(save_path, exist_ok=True)
         
-        filename = _build_processed_filename(self.dataname, self.sample_ratio)
-        filepath = os.path.join(save_path, filename)
+        filepath = os.path.join(save_path, self.processed_filename)
         with open(filepath, 'wb') as f:
             pickle.dump(graph_list, f)
         print(f"Saved: {filepath}")
@@ -210,8 +224,7 @@ class TwitterDataProcessor:
     
     def load_processed_data(self, load_path=None):
         if load_path is None:
-            filename = _build_processed_filename(self.dataname, self.sample_ratio)
-            load_path = os.path.join(Config.PROCESSED_DIR, filename)
+            load_path = os.path.join(Config.PROCESSED_DIR, self.processed_filename)
         
         if not os.path.exists(load_path):
             raise FileNotFoundError(f"Processed data not found: {load_path}")
@@ -246,9 +259,28 @@ class PhemeDataProcessor:
             raise ValueError(f"No events found under {self.data_root}")
 
         print(f"PHEME events selected: {', '.join(self.events)}")
+        self.event_suffix = self._build_event_suffix()
+        self.processed_filename = _build_processed_filename(
+            self.dataname,
+            self.sample_ratio,
+            detail=self.event_suffix
+        )
         
         from bert_feature_extractor import BERTFeatureExtractor
         self.bert_extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
+    
+    def _build_event_suffix(self):
+        """Return a deterministic suffix that captures selected events."""
+        if not self.events:
+            return None
+        normalized = []
+        for event in sorted(set(self.events)):
+            slug = _slugify_token(event)
+            if slug:
+                normalized.append(slug)
+        if not normalized:
+            return 'events-all'
+        return f"events-{'-'.join(normalized)}"
     
     @staticmethod
     def _read_json(path):
@@ -496,8 +528,7 @@ class PhemeDataProcessor:
             save_path = Config.PROCESSED_DIR
         os.makedirs(save_path, exist_ok=True)
         
-        filename = _build_processed_filename(self.dataname, self.sample_ratio)
-        filepath = os.path.join(save_path, filename)
+        filepath = os.path.join(save_path, self.processed_filename)
         with open(filepath, 'wb') as f:
             pickle.dump(graph_list, f)
         print(f"Saved: {filepath}")
@@ -505,8 +536,7 @@ class PhemeDataProcessor:
     
     def load_processed_data(self, load_path=None):
         if load_path is None:
-            filename = _build_processed_filename(self.dataname, self.sample_ratio)
-            load_path = os.path.join(Config.PROCESSED_DIR, filename)
+            load_path = os.path.join(Config.PROCESSED_DIR, self.processed_filename)
         
         if not os.path.exists(load_path):
             raise FileNotFoundError(f"Processed data not found: {load_path}")
@@ -519,6 +549,7 @@ class WeiboDataProcessor:
     def __init__(self, dataname='Weibo', feature_dim=768, sample_ratio=1.0):
         self.dataname = dataname
         self.sample_ratio = sample_ratio
+        self.processed_filename = _build_processed_filename(self.dataname, self.sample_ratio)
         
         self.data_path = os.path.join(Config.DATA_DIR, 'Weibo')
         
@@ -657,9 +688,7 @@ class WeiboDataProcessor:
         
         os.makedirs(save_path, exist_ok=True)
         
-        filename = _build_processed_filename(self.dataname, self.sample_ratio)
-        
-        filepath = os.path.join(save_path, filename)
+        filepath = os.path.join(save_path, self.processed_filename)
         with open(filepath, 'wb') as f:
             pickle.dump(graph_list, f)
         
@@ -669,8 +698,7 @@ class WeiboDataProcessor:
     def load_processed_data(self, load_path=None):
         """Load processed data"""
         if load_path is None:
-            filename = _build_processed_filename(self.dataname, self.sample_ratio)
-            load_path = os.path.join(Config.PROCESSED_DIR, filename)
+            load_path = os.path.join(Config.PROCESSED_DIR, self.processed_filename)
         
         if not os.path.exists(load_path):
             raise FileNotFoundError(f"Processed data not found: {load_path}")

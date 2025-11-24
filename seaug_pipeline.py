@@ -53,8 +53,29 @@ class SeAugPipeline:
             'augmented_nodes': 0,
             'augmentation_time': 0.0
         }
+
+        # Track metadata for dataset-specific artifacts (e.g., PHEME events)
+        self.current_events = None
+        self.current_event_suffix = None
         
         print(f"SeAug Pipeline: {gnn_backbone.upper()}, Augmentation: {enable_augmentation}, Strategy: {node_selection_strategy}")
+
+    @staticmethod
+    def _format_sample_ratio(sample_ratio: float) -> str:
+        """Return a compact string for the given sample ratio."""
+        ratio_str = f"{sample_ratio}".rstrip('0').rstrip('.')
+        return ratio_str or "0"
+
+    def _build_run_tag(self, dataset_name: str, sample_ratio: float) -> str:
+        """Compose a consistent file prefix for artifacts produced by a run."""
+        sample_tag = self._format_sample_ratio(sample_ratio)
+        aug_tag = "aug" if self.enable_augmentation else "noaug"
+        backbone_tag = self.gnn_backbone
+        parts = [dataset_name]
+        if dataset_name.lower() == 'pheme' and self.current_event_suffix:
+            parts.append(self.current_event_suffix)
+        parts.extend([backbone_tag, aug_tag, f"sample{sample_tag}"])
+        return "_".join(parts)
     
     def setup_components(self):
         if self.enable_augmentation:
@@ -72,6 +93,10 @@ class SeAugPipeline:
     def process_data(self, dataset_name: str, sample_ratio: float = 1.0):
         print(f"[Stage 1] Loading data: {dataset_name}")
         
+        # Reset dataset-specific metadata before loading a new dataset
+        self.current_events = None
+        self.current_event_suffix = None
+        
         if dataset_name == 'Weibo':
             processor = WeiboDataProcessor(
                 dataname=dataset_name,
@@ -85,6 +110,8 @@ class SeAugPipeline:
                 sample_ratio=sample_ratio,
                 events=self.config.PHEME_EVENTS or None
             )
+            self.current_events = getattr(processor, 'events', None)
+            self.current_event_suffix = getattr(processor, 'event_suffix', None)
         else:
             processor = TwitterDataProcessor(
                 dataname=dataset_name,
@@ -92,11 +119,12 @@ class SeAugPipeline:
                 sample_ratio=sample_ratio
             )
         
-        if sample_ratio == 1.0:
-            processed_filename = f'{dataset_name}_processed_bert_full.pkl'
-        else:
-            processed_filename = f'{dataset_name}_processed_bert_sample{sample_ratio}.pkl'
-        
+        processed_filename = getattr(
+            processor,
+            'processed_filename',
+            f'{dataset_name}_processed_bert_full.pkl' if sample_ratio == 1.0
+            else f'{dataset_name}_processed_bert_sample{sample_ratio}.pkl'
+        )
         processed_path = os.path.join(self.config.PROCESSED_DIR, processed_filename)
         
         if os.path.exists(processed_path):
@@ -192,7 +220,7 @@ class SeAugPipeline:
             print("Please check your API quota and try again later.")
             raise SystemExit(1)
     
-    def train_model(self, train_list, val_list, test_list, dataset_name: str):
+    def train_model(self, train_list, val_list, test_list, dataset_name: str, sample_ratio: float = 1.0):
         print(f"[Stage 4] Training model")
         
         augmented_dim = self.lm_encoder.embedding_dim if self.enable_augmentation else 0
@@ -215,11 +243,11 @@ class SeAugPipeline:
         val_loader = DataLoader(val_list, batch_size=self.config.BATCH_SIZE, shuffle=False, num_workers=self.config.NUM_WORKERS)
         test_loader = DataLoader(test_list, batch_size=self.config.BATCH_SIZE, shuffle=False, num_workers=self.config.NUM_WORKERS)
         
-        results = self._simple_training_loop(train_loader, val_loader, test_loader, dataset_name)
+        results = self._simple_training_loop(train_loader, val_loader, test_loader, dataset_name, sample_ratio)
         
         return results
     
-    def _simple_training_loop(self, train_loader, val_loader, test_loader, dataset_name):
+    def _simple_training_loop(self, train_loader, val_loader, test_loader, dataset_name, sample_ratio):
         from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
         
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.LEARNING_RATE, weight_decay=self.config.WEIGHT_DECAY)
@@ -247,6 +275,9 @@ class SeAugPipeline:
                 leave=False,
                 dynamic_ncols=True
             )
+
+        run_tag = self._build_run_tag(dataset_name, sample_ratio)
+        checkpoint_path = os.path.join(self.config.SAVE_DIR, f'{run_tag}_best.pt')
 
         for epoch in epoch_iter:
             self.model.train()
@@ -322,7 +353,7 @@ class SeAugPipeline:
             if val_acc >= best_val_acc:
                 best_val_acc = val_acc
                 patience_counter = 0
-                torch.save(self.model.state_dict(), os.path.join(self.config.SAVE_DIR, f'{dataset_name}_seaug_best.pt'))
+                torch.save(self.model.state_dict(), checkpoint_path)
             else:
                 patience_counter += 1
                 if patience_counter >= self.config.PATIENCE:
@@ -331,7 +362,7 @@ class SeAugPipeline:
         
         print(f"Training completed. Best val acc: {best_val_acc:.4f}")
         
-        self.model.load_state_dict(torch.load(os.path.join(self.config.SAVE_DIR, f'{dataset_name}_seaug_best.pt')))
+        self.model.load_state_dict(torch.load(checkpoint_path))
         test_results = self._evaluate(test_loader, return_predictions=True)
         print("Test metrics: "
               f"Acc={test_results['accuracy']:.4f}, "
@@ -390,7 +421,7 @@ class SeAugPipeline:
         
         return results
     
-    def _save_training_curves(self, history: dict, dataset_name: str):
+    def _save_training_curves(self, history: dict, run_tag: str):
         if not history:
             return None
         
@@ -407,7 +438,7 @@ class SeAugPipeline:
             print("matplotlib not installed; skipping training curve plot.")
             return None
         
-        plot_path = os.path.join(self.config.SAVE_DIR, f"{dataset_name}_training_curves.png")
+        plot_path = os.path.join(self.config.SAVE_DIR, f"{run_tag}_training_curves.png")
         
         fig, axes = plt.subplots(1, 2, figsize=(12, 4))
         
@@ -436,19 +467,28 @@ class SeAugPipeline:
         import json
         from datetime import datetime
         
+        run_tag = self._build_run_tag(dataset_name, sample_ratio)
+        
         print(f"\nTest Results: Acc={results['test_results']['accuracy']:.4f}, F1={results['test_results']['f1']:.4f}")
         if self.enable_augmentation:
             print(f"Augmented {self.stats['augmented_nodes']:,} nodes in {self.stats['augmentation_time']:.2f}s")
+        if dataset_name.lower() == 'pheme' and self.current_events:
+            print(f"Events: {', '.join(self.current_events)}")
         
         output_files = {}
-        history_plot = self._save_training_curves(results.get('history'), dataset_name)
+        history_plot = self._save_training_curves(results.get('history'), run_tag)
         if history_plot:
             output_files['training_plot'] = history_plot
         
         if save_json:
-            json_path = os.path.join(self.config.SAVE_DIR, f'{dataset_name}_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json')
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            json_path = os.path.join(self.config.SAVE_DIR, f'{run_tag}_results_{timestamp}.json')
             json_results = {
                 'dataset': dataset_name,
+                'dataset_metadata': {
+                    'events': self.current_events if dataset_name.lower() == 'pheme' else None,
+                    'event_suffix': self.current_event_suffix if dataset_name.lower() == 'pheme' else None
+                },
                 'timestamp': datetime.now().isoformat(),
                 'config': {
                     'enable_augmentation': self.enable_augmentation,
@@ -527,7 +567,7 @@ class SeAugPipeline:
         val_list = self.augment_data(val_list, "val")
         test_list = self.augment_data(test_list, "test")
         
-        results = self.train_model(train_list, val_list, test_list, dataset_name)
+        results = self.train_model(train_list, val_list, test_list, dataset_name, sample_ratio)
         self.output_results(results, dataset_name, sample_ratio)
         
         return results

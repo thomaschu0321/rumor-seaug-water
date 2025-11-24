@@ -26,7 +26,7 @@ class Config:
         if event.strip()
     ]
     # Leave unset (None) to automatically include every discovered event.
-    PHEME_EVENTS = _pheme_env or None  # e.g. ['ferguson', 'sydneysiege'] 
+    PHEME_EVENTS = _pheme_env or None  # e.g. ['ferguson', 'sydneysiege'] / ['sydneysiege'] / None 
     
     # ========== Model Configuration ==========
     HIDDEN_DIM = 32       # GNN hidden layer dimension
