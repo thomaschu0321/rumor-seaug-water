@@ -342,6 +342,48 @@ class SeAugPipeline:
         
         return results
     
+    def _save_training_curves(self, history: dict, dataset_name: str):
+        if not history:
+            return None
+        
+        num_epochs = len(history.get('train_loss', []))
+        if num_epochs == 0:
+            return None
+        epochs = range(1, num_epochs + 1)
+        
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+        except ImportError:
+            print("matplotlib not installed; skipping training curve plot.")
+            return None
+        
+        plot_path = os.path.join(self.config.SAVE_DIR, f"{dataset_name}_training_curves.png")
+        
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+        
+        axes[0].plot(epochs, history.get('train_loss', []), label='Train')
+        axes[0].plot(epochs, history.get('val_loss', []), label='Val')
+        axes[0].set_title('Loss vs Epoch')
+        axes[0].set_xlabel('Epoch')
+        axes[0].set_ylabel('Loss')
+        axes[0].legend()
+        
+        axes[1].plot(epochs, history.get('train_acc', []), label='Train')
+        axes[1].plot(epochs, history.get('val_acc', []), label='Val')
+        axes[1].set_title('Accuracy vs Epoch')
+        axes[1].set_xlabel('Epoch')
+        axes[1].set_ylabel('Accuracy')
+        axes[1].legend()
+        
+        fig.tight_layout()
+        fig.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        
+        print(f"Training curves saved to: {plot_path}")
+        return plot_path
+    
     def output_results(self, results: dict, dataset_name: str, sample_ratio: float = 1.0, save_json: bool = True, save_csv: bool = True):
         import json
         from datetime import datetime
@@ -351,6 +393,9 @@ class SeAugPipeline:
             print(f"Augmented {self.stats['augmented_nodes']:,} nodes in {self.stats['augmentation_time']:.2f}s")
         
         output_files = {}
+        history_plot = self._save_training_curves(results.get('history'), dataset_name)
+        if history_plot:
+            output_files['training_plot'] = history_plot
         
         if save_json:
             json_path = os.path.join(self.config.SAVE_DIR, f'{dataset_name}_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json')
