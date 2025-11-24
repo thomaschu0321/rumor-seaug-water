@@ -21,6 +21,7 @@ class Config:
     # ========== Data Configuration ==========
     FEATURE_DIM = 768  # BERT feature dimension
     NUM_CLASSES = 2     # Binary classification
+    PHEME_EVENT_LIMIT = 1  # Limit of PHEME events to load (None for all)
     
     # ========== Model Configuration ==========
     HIDDEN_DIM = 32       # GNN hidden layer dimension
@@ -74,7 +75,7 @@ class Config:
     # LLM Parameters
     LLM_MAX_TOKENS = int(os.environ.get('LLM_MAX_TOKENS', '500'))
     LLM_TEMPERATURE = float(os.environ.get('LLM_TEMPERATURE', '0.7'))
-    LLM_BATCH_SIZE = int(os.environ.get('LLM_BATCH_SIZE', '10'))
+    LLM_BATCH_SIZE = int(os.environ.get('LLM_BATCH_SIZE', '50'))
     
     # Network/Timeout Configuration
     LLM_TIMEOUT = int(os.environ.get('LLM_TIMEOUT', '120'))

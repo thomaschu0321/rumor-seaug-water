@@ -47,6 +47,11 @@ Thumbs.db
 # Logs
 *.log
 
+# Data artifacts
+data/processed/
+data/PHEME/all-rnr-annotated-threads/
+results/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 

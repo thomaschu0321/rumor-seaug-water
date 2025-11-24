@@ -11,7 +11,7 @@ import argparse
 import numpy as np
 import torch
 from config import Config
-from data_preprocessing import TwitterDataProcessor, WeiboDataProcessor, split_data
+from data_preprocessing import TwitterDataProcessor, WeiboDataProcessor, PhemeDataProcessor, split_data
 from node_selector import NodeSelector
 from node_augmentor import LanguageModelEncoder, NodeAugmentor, QuotaExceededError
 from model_seaug import get_seaug_model
@@ -27,7 +27,7 @@ class SeAugPipeline:
         fusion_strategy: str = "concat",
         augmentation_ratio: float = 0.3,
         gnn_backbone: str = "gcn",
-        batch_size: int = 20
+        batch_size: int = 50
     ):
         self.config = config or Config()
         self.enable_augmentation = enable_augmentation
@@ -69,6 +69,12 @@ class SeAugPipeline:
         
         if dataset_name == 'Weibo':
             processor = WeiboDataProcessor(
+                dataname=dataset_name,
+                feature_dim=self.config.FEATURE_DIM,
+                sample_ratio=sample_ratio
+            )
+        elif dataset_name == 'PHEME':
+            processor = PhemeDataProcessor(
                 dataname=dataset_name,
                 feature_dim=self.config.FEATURE_DIM,
                 sample_ratio=sample_ratio
@@ -436,14 +442,14 @@ class SeAugPipeline:
 
 def main():
     parser = argparse.ArgumentParser(description="SeAug Framework for Rumor Detection")
-    parser.add_argument('--dataset', type=str, default='Twitter15', choices=['Twitter15', 'Twitter16', 'Weibo'])
+    parser.add_argument('--dataset', type=str, default='Twitter15', choices=['Twitter15', 'Twitter16', 'Weibo', 'PHEME'])
     parser.add_argument('--sample_ratio', type=float, default=1.0)
     parser.add_argument('--enable_augmentation', action='store_true')
     parser.add_argument('--node_strategy', type=str, default='hybrid', choices=['uncertainty', 'importance', 'hybrid'])
     parser.add_argument('--fusion_strategy', type=str, default='concat', choices=['concat', 'weighted', 'gated', 'attention'])
     parser.add_argument('--augmentation_ratio', type=float, default=0.3)
     parser.add_argument('--gnn_backbone', type=str, default='gcn', choices=['gcn', 'gat'])
-    parser.add_argument('--batch_size', type=int, default=20)
+    parser.add_argument('--batch_size', type=int, default=50)
     
     args = parser.parse_args()
     

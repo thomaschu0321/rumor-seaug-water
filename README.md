@@ -73,7 +73,7 @@ python seaug_pipeline.py \
     --node_strategy hybrid \
     --fusion_strategy concat \
     --augmentation_ratio 0.3 \
-    --batch_size 20
+    --batch_size 50
 ```
 
 ## Architecture

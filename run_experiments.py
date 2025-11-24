@@ -75,7 +75,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run FYP experiments')
     
     parser.add_argument('--dataset', type=str, default='Twitter15',
-                       choices=['Twitter15', 'Twitter16', 'Weibo'],
+                       choices=['Twitter15', 'Twitter16', 'Weibo', 'PHEME'],
                        help='Dataset to use (default: Twitter15)')
     parser.add_argument('--augmentation_ratio', type=float, default=0.3,
                        help='Ratio of nodes to augment (default: 0.3)')
@@ -85,8 +85,8 @@ def main():
     parser.add_argument('--fusion_strategy', type=str, default='concat',
                        choices=['concat', 'weighted', 'gated', 'attention'],
                        help='Feature fusion strategy (default: concat)')
-    parser.add_argument('--batch_size', type=int, default=20,
-                       help='Batch size for LLM API calls (default: 20)')
+    parser.add_argument('--batch_size', type=int, default=50,
+                       help='Batch size for LLM API calls (default: 50)')
     parser.add_argument('--sample_ratio', type=float, default=1.0,
                        help='Data sampling ratio (default: 1.0)')
     parser.add_argument('--skip', type=str, nargs='+',

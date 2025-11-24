@@ -1,11 +1,14 @@
 """Data preprocessing module"""
 import os
+import json
+from email.utils import parsedate_to_datetime
 import numpy as np
 import torch
 from torch_geometric.data import Data
 from tqdm import tqdm
 import pickle
 from config import Config
+from data.PHEME.convert_veracity_annotations import convert_annotations
 
 
 class Node_tweet:
@@ -44,6 +47,18 @@ def construct_tree(tree_dict):
     return edge_index, num_nodes
 
 
+
+
+def _extract_node_texts(tree, default_text):
+    """Return ordered list of node texts, falling back to default_text"""
+    num_nodes = len(tree)
+    texts = []
+    for idx in range(1, num_nodes + 1):
+        node_text = tree.get(idx, {}).get('text')
+        if not node_text:
+            node_text = default_text
+        texts.append(node_text)
+    return texts
 
 
 class TwitterDataProcessor:
@@ -153,7 +168,7 @@ class TwitterDataProcessor:
                 
                 edge_index, num_nodes = construct_tree(tree)
                 root_text = texts_dict[eid]
-                texts = [root_text] * num_nodes
+                texts = _extract_node_texts(tree, root_text)
                 x = self.bert_extractor.extract_batch(texts, show_progress=False)
                 
                 data = Data(
@@ -174,28 +189,245 @@ class TwitterDataProcessor:
             print(f"Skipped: {skipped} graphs")
         
         return graph_list
+
+
+class PhemeDataProcessor:
+    def __init__(
+        self,
+        dataname='PHEME',
+        feature_dim=768,
+        sample_ratio=1.0,
+        events=None,
+        event_limit=None,
+    ):
+        self.dataname = dataname
+        self.sample_ratio = sample_ratio
+        self.feature_dim = feature_dim
+        self.data_root = os.path.join(Config.DATA_DIR, 'PHEME', 'all-rnr-annotated-threads')
+        if not os.path.exists(self.data_root):
+            raise FileNotFoundError(f"PHEME data path does not exist: {self.data_root}")
+        
+        discovered_events = sorted(
+            d for d in os.listdir(self.data_root)
+            if os.path.isdir(os.path.join(self.data_root, d))
+        )
+        if events is not None:
+            self.events = events
+        else:
+            self.events = discovered_events
+
+        if event_limit is None:
+            event_limit = Config.PHEME_EVENT_LIMIT
+
+        if event_limit is not None:
+            if event_limit <= 0:
+                raise ValueError("event_limit must be a positive integer")
+            self.events = self.events[:event_limit]
+
+        if not self.events:
+            raise ValueError(f"No events found under {self.data_root}")
+        
+        from bert_feature_extractor import BERTFeatureExtractor
+        self.bert_extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
+    
+    @staticmethod
+    def _read_json(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    
+    @staticmethod
+    def _clean_text(text):
+        text = text or ""
+        text = text.replace('\n', ' ').strip()
+        return text if text else "empty tweet"
+    
+    @staticmethod
+    def _get_timestamp(created_at):
+        if not created_at:
+            return None
+        try:
+            return parsedate_to_datetime(created_at).timestamp()
+        except Exception:
+            return None
+    
+    def _build_thread_tree(self, thread_path):
+        source_dir = os.path.join(thread_path, 'source-tweets')
+        reaction_dir = os.path.join(thread_path, 'reactions')
+        
+        if not os.path.isdir(source_dir):
+            raise FileNotFoundError(f"Missing source directory: {source_dir}")
+        
+        source_files = [os.path.join(source_dir, f) for f in os.listdir(source_dir) if f.endswith('.json')]
+        if not source_files:
+            raise FileNotFoundError(f"No source tweet json under {source_dir}")
+        
+        source_data = self._read_json(source_files[0])
+        root_id = str(source_data.get('id_str') or source_data.get('id'))
+        root_text = self._clean_text(source_data.get('text', ''))
+        root_ts = self._get_timestamp(source_data.get('created_at')) or 0.0
+        
+        tweets = {
+            root_id: {
+                'text': root_text,
+                'parent': None,
+                'timestamp': root_ts
+            }
+        }
+        
+        if os.path.isdir(reaction_dir):
+            for fname in os.listdir(reaction_dir):
+                if not fname.endswith('.json'):
+                    continue
+                fpath = os.path.join(reaction_dir, fname)
+                try:
+                    tweet = self._read_json(fpath)
+                except json.JSONDecodeError:
+                    continue
+                
+                tweet_id = str(tweet.get('id_str') or tweet.get('id'))
+                if not tweet_id or tweet_id in tweets:
+                    continue
+                
+                parent_id = tweet.get('in_reply_to_status_id_str') or tweet.get('in_reply_to_status_id')
+                parent_id = str(parent_id) if parent_id else root_id
+                tweets[tweet_id] = {
+                    'text': self._clean_text(tweet.get('text', '')),
+                    'parent': parent_id,
+                    'timestamp': self._get_timestamp(tweet.get('created_at'))
+                }
+        
+        # Ensure parents exist; fallback to root if missing
+        valid_ids = set(tweets.keys())
+        for tid, meta in list(tweets.items()):
+            parent = meta['parent']
+            if parent and parent not in valid_ids:
+                meta['parent'] = root_id
+        
+        # Order tweets: root first, then by timestamp/id for stability
+        other_ids = [tid for tid in tweets.keys() if tid != root_id]
+        other_ids.sort(key=lambda tid: ((tweets[tid]['timestamp'] if tweets[tid]['timestamp'] is not None else float('inf')), tid))
+        ordered_ids = [root_id] + other_ids
+        id_map = {tid: idx + 1 for idx, tid in enumerate(ordered_ids)}
+        
+        tree = {}
+        for tid in ordered_ids:
+            idx = id_map[tid]
+            parent_raw = tweets[tid]['parent']
+            parent_idx = 'None'
+            if parent_raw and parent_raw in id_map:
+                parent_idx = str(id_map[parent_raw])
+                if parent_idx == str(idx):  # guard against self loops
+                    parent_idx = 'None'
+            tree[idx] = {
+                'parent': parent_idx,
+                'text': tweets[tid]['text']
+            }
+        return tree
+    
+    def _get_label(self, thread_path, subset):
+        if subset == 'non-rumours':
+            return 0
+        annotation_path = os.path.join(thread_path, 'annotation.json')
+        if not os.path.exists(annotation_path):
+            return None
+        annotation = self._read_json(annotation_path)
+        veracity = convert_annotations(annotation, string=False)
+        if veracity is None:
+            return None
+        return 1  # treat all rumours as rumour class for binary detection
+    
+    def load_raw_data(self):
+        treeDic = {}
+        labelDic = {}
+        skipped = 0
+        
+        for event in self.events:
+            event_path = os.path.join(self.data_root, event)
+            for subset in ['rumours', 'non-rumours']:
+                subset_path = os.path.join(event_path, subset)
+                if not os.path.isdir(subset_path):
+                    continue
+                
+                threads = [d for d in os.listdir(subset_path) if os.path.isdir(os.path.join(subset_path, d))]
+                for thread_id in threads:
+                    thread_path = os.path.join(subset_path, thread_id)
+                    eid = f"{event}-{thread_id}"
+                    try:
+                        label = self._get_label(thread_path, subset)
+                        if label is None:
+                            skipped += 1
+                            continue
+                        tree = self._build_thread_tree(thread_path)
+                        if len(tree) < 2:
+                            skipped += 1
+                            continue
+                        treeDic[eid] = tree
+                        labelDic[eid] = label
+                    except Exception as exc:
+                        print(f"Error parsing {eid}: {exc}")
+                        skipped += 1
+        
+        print(f"PHEME loaded trees: {len(treeDic)}, labels: {len(labelDic)}, skipped: {skipped}")
+        return treeDic, labelDic
+    
+    def process_data(self):
+        print(f"\nProcessing {self.dataname}...")
+        treeDic, labelDic = self.load_raw_data()
+        valid_eids = [eid for eid in labelDic.keys() if eid in treeDic]
+        
+        if not valid_eids:
+            raise ValueError("No valid event threads found for PHEME.")
+        
+        if self.sample_ratio < 1.0:
+            num_samples = max(1, int(len(valid_eids) * self.sample_ratio))
+            np.random.seed(42)
+            valid_eids = np.random.choice(valid_eids, num_samples, replace=False).tolist()
+        
+        graph_list = []
+        skipped = 0
+        
+        for eid in tqdm(valid_eids, desc="Processing"):
+            try:
+                tree = treeDic[eid]
+                label = labelDic[eid]
+                edge_index, num_nodes = construct_tree(tree)
+                root_text = tree.get(1, {}).get('text', "empty tweet")
+                texts = _extract_node_texts(tree, root_text)
+                x = self.bert_extractor.extract_batch(texts, show_progress=False)
+                
+                data = Data(
+                    x=torch.FloatTensor(x),
+                    edge_index=torch.LongTensor(edge_index),
+                    y=torch.LongTensor([label]),
+                    num_nodes=num_nodes,
+                    eid=eid
+                )
+                graph_list.append(data)
+            except Exception as e:
+                print(f"Error processing {eid}: {e}")
+                skipped += 1
+        
+        print(f"Processed: {len(graph_list)} graphs")
+        if skipped > 0:
+            print(f"Skipped after processing: {skipped}")
+        return graph_list
     
     def save_processed_data(self, graph_list, save_path=None):
-        """Save processed data"""
         if save_path is None:
             save_path = Config.PROCESSED_DIR
-        
         os.makedirs(save_path, exist_ok=True)
         
         if self.sample_ratio == 1.0:
             filename = f'{self.dataname}_processed_bert_full.pkl'
         else:
             filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
-        
         filepath = os.path.join(save_path, filename)
         with open(filepath, 'wb') as f:
             pickle.dump(graph_list, f)
-        
         print(f"Saved: {filepath}")
         return filepath
     
     def load_processed_data(self, load_path=None):
-        """Load processed data"""
         if load_path is None:
             if self.sample_ratio == 1.0:
                 filename = f'{self.dataname}_processed_bert_full.pkl'
@@ -208,11 +440,8 @@ class TwitterDataProcessor:
         
         with open(load_path, 'rb') as f:
             graph_list = pickle.load(f)
-        
         print(f"Loaded {len(graph_list)} graphs")
         return graph_list
-
-
 class WeiboDataProcessor:
     def __init__(self, dataname='Weibo', feature_dim=768, sample_ratio=1.0):
         self.dataname = dataname
@@ -326,7 +555,7 @@ class WeiboDataProcessor:
                 
                 edge_index, num_nodes = construct_tree(tree)
                 root_text = texts_dict[eid]
-                texts = [root_text] * num_nodes
+                texts = _extract_node_texts(tree, root_text)
                 x = self.bert_extractor.extract_batch(texts, show_progress=False)
                 
                 data = Data(
