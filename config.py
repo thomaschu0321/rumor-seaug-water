@@ -21,7 +21,12 @@ class Config:
     # ========== Data Configuration ==========
     FEATURE_DIM = 768  # BERT feature dimension
     NUM_CLASSES = 2     # Binary classification
-    PHEME_EVENT_LIMIT = 1  # Limit of PHEME events to load (None for all)
+    _pheme_env = [
+        event.strip() for event in os.environ.get('PHEME_EVENTS', '').split(',')
+        if event.strip()
+    ]
+    # Leave unset (None) to automatically include every discovered event.
+    PHEME_EVENTS = _pheme_env or None  # e.g. ['ferguson', 'sydneysiege'] 
     
     # ========== Model Configuration ==========
     HIDDEN_DIM = 32       # GNN hidden layer dimension

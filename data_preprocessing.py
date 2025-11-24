@@ -8,7 +8,6 @@ from torch_geometric.data import Data
 from tqdm import tqdm
 import pickle
 from config import Config
-from data.PHEME.convert_veracity_annotations import convert_annotations
 
 
 class Node_tweet:
@@ -230,34 +229,23 @@ class PhemeDataProcessor:
         feature_dim=768,
         sample_ratio=1.0,
         events=None,
-        event_limit=None,
     ):
         self.dataname = dataname
         self.sample_ratio = sample_ratio
         self.feature_dim = feature_dim
-        self.data_root = os.path.join(Config.DATA_DIR, 'PHEME', 'all-rnr-annotated-threads')
-        if not os.path.exists(self.data_root):
-            raise FileNotFoundError(f"PHEME data path does not exist: {self.data_root}")
+        self.data_root = self._resolve_data_root()
+        discovered_events = self._discover_events()
         
-        discovered_events = sorted(
-            d for d in os.listdir(self.data_root)
-            if os.path.isdir(os.path.join(self.data_root, d))
-        )
-        if events is not None:
-            self.events = events
-        else:
+        if events is None:
             self.events = discovered_events
-
-        if event_limit is None:
-            event_limit = Config.PHEME_EVENT_LIMIT
-
-        if event_limit is not None:
-            if event_limit <= 0:
-                raise ValueError("event_limit must be a positive integer")
-            self.events = self.events[:event_limit]
+        else:
+            # Explicit selections override discovery.
+            self.events = list(events)
 
         if not self.events:
             raise ValueError(f"No events found under {self.data_root}")
+
+        print(f"PHEME events selected: {', '.join(self.events)}")
         
         from bert_feature_extractor import BERTFeatureExtractor
         self.bert_extractor = BERTFeatureExtractor(model_name="bert-base-uncased")
@@ -288,11 +276,58 @@ class PhemeDataProcessor:
         except Exception:
             return None
     
+    @staticmethod
+    def _normalize_subset_name(name):
+        lowered = name.lower().replace('_', '-')
+        if 'non' in lowered and 'rum' in lowered:
+            return 'non-rumours'
+        if 'rum' in lowered:
+            return 'rumours'
+        return None
+    
+    @staticmethod
+    def _find_existing_dir(base_path, candidates):
+        for candidate in candidates:
+            candidate_path = os.path.join(base_path, candidate)
+            if os.path.isdir(candidate_path):
+                return candidate_path
+        return None
+    
+    def _resolve_data_root(self):
+        """Find whichever PHEME layout is available."""
+        candidate_roots = [
+            os.path.join(Config.DATA_DIR, 'PHEME', 'all-rnr-annotated-threads'),
+            os.path.join(Config.DATA_DIR, 'PHEME'),
+        ]
+        for root in candidate_roots:
+            if os.path.isdir(root):
+                return root
+        raise FileNotFoundError(
+            "Could not locate either legacy or simplified PHEME directories under data/PHEME"
+        )
+    
+    def _discover_events(self):
+        events = []
+        for entry in sorted(os.listdir(self.data_root)):
+            event_path = os.path.join(self.data_root, entry)
+            if not os.path.isdir(event_path):
+                continue
+            subset_dirs = [
+                self._normalize_subset_name(d)
+                for d in os.listdir(event_path)
+                if os.path.isdir(os.path.join(event_path, d))
+            ]
+            if any(s in ('rumours', 'non-rumours') for s in subset_dirs):
+                events.append(entry)
+        if not events:
+            raise ValueError(f"No PHEME events discovered under {self.data_root}")
+        return events
+    
     def _build_thread_tree(self, thread_path):
-        source_dir = os.path.join(thread_path, 'source-tweets')
-        reaction_dir = os.path.join(thread_path, 'reactions')
+        source_dir = self._find_existing_dir(thread_path, ['source-tweets', 'source-tweet'])
+        reaction_dir = self._find_existing_dir(thread_path, ['reactions'])
         
-        if not os.path.isdir(source_dir):
+        if not source_dir:
             raise FileNotFoundError(f"Missing source directory: {source_dir}")
         
         source_files = [os.path.join(source_dir, f) for f in os.listdir(source_dir) if f.endswith('.json')]
@@ -312,7 +347,7 @@ class PhemeDataProcessor:
             }
         }
         
-        if os.path.isdir(reaction_dir):
+        if reaction_dir and os.path.isdir(reaction_dir):
             for fname in os.listdir(reaction_dir):
                 if not fname.endswith('.json'):
                     continue
@@ -363,16 +398,12 @@ class PhemeDataProcessor:
         return tree
     
     def _get_label(self, thread_path, subset):
-        if subset == 'non-rumours':
+        normalized_subset = self._normalize_subset_name(subset)
+        if normalized_subset == 'non-rumours':
             return 0
-        annotation_path = os.path.join(thread_path, 'annotation.json')
-        if not os.path.exists(annotation_path):
-            return None
-        annotation = self._read_json(annotation_path)
-        veracity = convert_annotations(annotation, string=False)
-        if veracity is None:
-            return None
-        return 1  # treat all rumours as rumour class for binary detection
+        if normalized_subset == 'rumours':
+            return 1
+        return None
     
     def load_raw_data(self):
         treeDic = {}
@@ -381,17 +412,27 @@ class PhemeDataProcessor:
         
         for event in self.events:
             event_path = os.path.join(self.data_root, event)
-            for subset in ['rumours', 'non-rumours']:
-                subset_path = os.path.join(event_path, subset)
-                if not os.path.isdir(subset_path):
+            if not os.path.isdir(event_path):
+                continue
+            potential_subsets = [
+                d for d in os.listdir(event_path)
+                if os.path.isdir(os.path.join(event_path, d))
+            ]
+            for subset in potential_subsets:
+                normalized_subset = self._normalize_subset_name(subset)
+                if normalized_subset not in ('rumours', 'non-rumours'):
                     continue
+                subset_path = os.path.join(event_path, subset)
                 
-                threads = [d for d in os.listdir(subset_path) if os.path.isdir(os.path.join(subset_path, d))]
+                threads = [
+                    d for d in os.listdir(subset_path)
+                    if os.path.isdir(os.path.join(subset_path, d))
+                ]
                 for thread_id in threads:
                     thread_path = os.path.join(subset_path, thread_id)
                     eid = f"{event}-{thread_id}"
                     try:
-                        label = self._get_label(thread_path, subset)
+                        label = self._get_label(thread_path, normalized_subset)
                         if label is None:
                             skipped += 1
                             continue

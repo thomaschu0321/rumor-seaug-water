@@ -82,7 +82,8 @@ class SeAugPipeline:
             processor = PhemeDataProcessor(
                 dataname=dataset_name,
                 feature_dim=self.config.FEATURE_DIM,
-                sample_ratio=sample_ratio
+                sample_ratio=sample_ratio,
+                events=self.config.PHEME_EVENTS or None
             )
         else:
             processor = TwitterDataProcessor(
