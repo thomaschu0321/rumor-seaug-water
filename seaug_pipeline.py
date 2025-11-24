@@ -17,6 +17,11 @@ from node_augmentor import LanguageModelEncoder, NodeAugmentor, QuotaExceededErr
 from model_seaug import get_seaug_model
 from torch_geometric.loader import DataLoader
 
+try:
+    from tqdm import tqdm
+except ImportError:  # tqdm is optional; fall back to plain logging.
+    tqdm = None
+
 
 class SeAugPipeline:
     def __init__(
@@ -214,16 +219,35 @@ class SeAugPipeline:
         return results
     
     def _simple_training_loop(self, train_loader, val_loader, test_loader, dataset_name):
-        from sklearn.metrics import accuracy_score, f1_score
+        from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
         
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.config.LEARNING_RATE, weight_decay=self.config.WEIGHT_DECAY)
         criterion = torch.nn.NLLLoss()
         
         best_val_acc = 0.0
         patience_counter = 0
-        history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': [], 'train_f1': [], 'val_f1': []}
+        history = {
+            'train_loss': [], 'val_loss': [],
+            'train_acc': [], 'val_acc': [],
+            'train_precision': [], 'val_precision': [],
+            'train_recall': [], 'val_recall': [],
+            'train_f1': [], 'val_f1': []
+        }
         
-        for epoch in range(self.config.NUM_EPOCHS):
+        if tqdm is None:
+            print("Tip: install tqdm (`pip install tqdm`) to see live epoch progress bars.")
+
+        progress_label = f"{self.gnn_backbone.upper()} {'SeAug' if self.enable_augmentation else 'Baseline'}"
+        epoch_iter = range(self.config.NUM_EPOCHS)
+        if tqdm is not None:
+            epoch_iter = tqdm(
+                epoch_iter,
+                desc=f"Training {progress_label}",
+                leave=False,
+                dynamic_ncols=True
+            )
+
+        for epoch in epoch_iter:
             self.model.train()
             train_loss = 0.0
             train_preds = []
@@ -243,6 +267,8 @@ class SeAugPipeline:
             
             train_loss /= len(train_loader)
             train_acc = accuracy_score(train_labels, train_preds)
+            train_precision = precision_score(train_labels, train_preds, average='binary', zero_division=0)
+            train_recall = recall_score(train_labels, train_preds, average='binary', zero_division=0)
             train_f1 = f1_score(train_labels, train_preds, average='binary', zero_division=0)
             
             self.model.eval()
@@ -262,19 +288,35 @@ class SeAugPipeline:
             
             val_loss /= len(val_loader)
             val_acc = accuracy_score(val_labels, val_preds)
+            val_precision = precision_score(val_labels, val_preds, average='binary', zero_division=0)
+            val_recall = recall_score(val_labels, val_preds, average='binary', zero_division=0)
             val_f1 = f1_score(val_labels, val_preds, average='binary', zero_division=0)
             
             history['train_loss'].append(train_loss)
             history['val_loss'].append(val_loss)
             history['train_acc'].append(train_acc)
             history['val_acc'].append(val_acc)
+            history['train_precision'].append(train_precision)
+            history['val_precision'].append(val_precision)
+            history['train_recall'].append(train_recall)
+            history['val_recall'].append(val_recall)
             history['train_f1'].append(train_f1)
             history['val_f1'].append(val_f1)
             
+            if tqdm is not None:
+                epoch_iter.set_postfix({
+                    'train_loss': f"{train_loss:.3f}",
+                    'val_loss': f"{val_loss:.3f}",
+                    'val_acc': f"{val_acc:.3f}",
+                    'val_prec': f"{val_precision:.3f}",
+                    'val_rec': f"{val_recall:.3f}",
+                    'val_f1': f"{val_f1:.3f}"
+                })
+
             if (epoch + 1) % 10 == 0 or epoch == 0:
                 print(f"Epoch {epoch+1:3d}/{self.config.NUM_EPOCHS}: "
-                      f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f} | "
-                      f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}")
+                      f"Train Loss: {train_loss:.4f}, Acc: {train_acc:.4f}, Prec: {train_precision:.4f}, Rec: {train_recall:.4f}, F1: {train_f1:.4f} | "
+                      f"Val Loss: {val_loss:.4f}, Acc: {val_acc:.4f}, Prec: {val_precision:.4f}, Rec: {val_recall:.4f}, F1: {val_f1:.4f}")
             
             if val_acc >= best_val_acc:
                 best_val_acc = val_acc
@@ -290,6 +332,11 @@ class SeAugPipeline:
         
         self.model.load_state_dict(torch.load(os.path.join(self.config.SAVE_DIR, f'{dataset_name}_seaug_best.pt')))
         test_results = self._evaluate(test_loader, return_predictions=True)
+        print("Test metrics: "
+              f"Acc={test_results['accuracy']:.4f}, "
+              f"Prec={test_results['precision']:.4f}, "
+              f"Rec={test_results['recall']:.4f}, "
+              f"F1={test_results['f1']:.4f}")
         
         return {
             'history': history,
