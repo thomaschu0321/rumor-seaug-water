@@ -526,9 +526,28 @@ class SeAugPipeline:
             file_exists = os.path.isfile(csv_path)
             fieldnames = ["dataset", "model_type", "enable_augmentation", "node_strategy", "fusion_strategy",
                          "augmentation_ratio", "gnn_backbone", "sample_ratio", "total_graphs", "total_nodes",
-                         "augmented_nodes", "augmentation_time", "accuracy", "precision", "recall", "f1"]
+                         "augmented_nodes", "augmentation_time", "accuracy", "precision", "recall", "f1",
+                         "pheme_events"]
             
             model_desc = "SeAug with LLM" if self.enable_augmentation else "Baseline (No Augmentation)"
+            
+            existing_rows = []
+            needs_header_upgrade = False
+            if file_exists:
+                with open(csv_path, mode="r", newline="") as existing_file:
+                    reader = csv.DictReader(existing_file)
+                    header = reader.fieldnames or []
+                    if "pheme_events" not in header:
+                        needs_header_upgrade = True
+                        existing_rows = list(reader)
+            if needs_header_upgrade:
+                with open(csv_path, mode="w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for row in existing_rows:
+                        row["pheme_events"] = row.get("pheme_events", "")
+                        writer.writerow(row)
+                file_exists = True  # Header upgraded; treat as existing file for append
             
             with open(csv_path, mode="a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -551,6 +570,7 @@ class SeAugPipeline:
                     "precision": results["test_results"]["precision"],
                     "recall": results["test_results"]["recall"],
                     "f1": results["test_results"]["f1"],
+                    "pheme_events": ", ".join(self.current_events) if dataset_name.lower() == "pheme" and self.current_events else "",
                 })
             output_files['csv'] = csv_path
         
