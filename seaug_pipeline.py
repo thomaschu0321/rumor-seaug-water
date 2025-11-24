@@ -13,7 +13,7 @@ import torch
 from config import Config
 from data_preprocessing import TwitterDataProcessor, WeiboDataProcessor, split_data
 from node_selector import NodeSelector
-from node_augmentor import LanguageModelEncoder, NodeAugmentor
+from node_augmentor import LanguageModelEncoder, NodeAugmentor, QuotaExceededError
 from model_seaug import get_seaug_model
 from torch_geometric.loader import DataLoader
 
@@ -112,35 +112,73 @@ class SeAugPipeline:
         if not self.enable_augmentation:
             return data_list
         
-        print(f"[Stage 2 & 3] Augmenting {split_name} data")
+        print(f"\n[Stage 2 & 3] Augmenting {split_name} data ({len(data_list)} graphs)")
         
         import time
         start_time = time.time()
         
-        if split_name == "train" and not self.node_selector.is_fitted:
-            self.node_selector.fit(data_list)
-        
-        selected_nodes_list = [self.node_selector.select_nodes(data) for data in data_list]
-        total_selected = sum(len(nodes) for nodes in selected_nodes_list)
-        total_nodes = sum(data.x.shape[0] for data in data_list)
-        
-        print(f"Selected {total_selected}/{total_nodes} nodes ({total_selected/total_nodes*100:.1f}%)")
-        
-        augmented_list = self.node_augmentor.augment_batch(
-            data_list,
-            selected_nodes_list,
-            texts_list=None,
-            verbose=True,
-            batch_size=self.batch_size
-        )
-        
-        elapsed = time.time() - start_time
-        self.stats['augmentation_time'] += elapsed
-        self.stats['augmented_nodes'] += total_selected
-        
-        print(f"Augmentation completed in {elapsed:.2f}s")
-        
-        return augmented_list
+        try:
+            # Stage 2: Node Selection
+            print(f"  [Stage 2] Selecting nodes to augment...")
+            if split_name == "train" and not self.node_selector.is_fitted:
+                print(f"    Fitting node selector on {len(data_list)} graphs...")
+                self.node_selector.fit(data_list)
+                print(f"    Node selector fitted")
+            
+            selected_nodes_list = [self.node_selector.select_nodes(data) for data in data_list]
+            total_selected = sum(len(nodes) for nodes in selected_nodes_list)
+            total_nodes = sum(data.x.shape[0] for data in data_list)
+            
+            print(f"    Selected {total_selected:,}/{total_nodes:,} nodes ({total_selected/total_nodes*100:.1f}%)")
+            
+            if total_selected == 0:
+                print(f"    No nodes selected for augmentation, skipping...")
+                return data_list
+            
+            # Stage 3: Node Augmentation
+            print(f"  [Stage 3] Augmenting selected nodes...")
+            initial_stats = self.node_augmentor.get_statistics()
+            
+            augmented_list = self.node_augmentor.augment_batch(
+                data_list,
+                selected_nodes_list,
+                texts_list=None,
+                verbose=True,
+                batch_size=self.batch_size
+            )
+            
+            # Print detailed statistics
+            final_stats = self.node_augmentor.get_statistics()
+            stats_diff = {k: final_stats[k] - initial_stats[k] for k in final_stats}
+            
+            elapsed = time.time() - start_time
+            self.stats['augmentation_time'] += elapsed
+            self.stats['augmented_nodes'] += total_selected
+            
+            print(f"\n  Augmentation Statistics:")
+            print(f"    Nodes augmented: {stats_diff['nodes_augmented']:,}")
+            print(f"    LLM API calls: {stats_diff['llm_calls']:,}")
+            print(f"    Cache hits: {stats_diff['cache_hits']:,}")
+            if stats_diff['llm_calls'] > 0:
+                cache_rate = stats_diff['cache_hits'] / (stats_diff['llm_calls'] + stats_diff['cache_hits']) * 100
+                print(f"    Cache hit rate: {cache_rate:.1f}%")
+            if stats_diff['rate_limited'] > 0:
+                print(f"    Rate limit events: {stats_diff['rate_limited']}")
+            if stats_diff['network_errors'] > 0:
+                print(f"    Network errors: {stats_diff['network_errors']}")
+            if stats_diff['retries'] > 0:
+                print(f"    Retries: {stats_diff['retries']}")
+            print(f"    Time elapsed: {elapsed:.2f}s")
+            if total_selected > 0:
+                print(f"    Avg time per node: {elapsed/total_selected:.3f}s")
+            
+            return augmented_list
+            
+        except QuotaExceededError as e:
+            print(f"\n❌ ERROR: {e}")
+            print("Stopping execution due to API quota exceeded.")
+            print("Please check your API quota and try again later.")
+            raise SystemExit(1)
     
     def train_model(self, train_list, val_list, test_list, dataset_name: str):
         print(f"[Stage 4] Training model")
@@ -228,7 +266,9 @@ class SeAugPipeline:
             history['val_f1'].append(val_f1)
             
             if (epoch + 1) % 10 == 0 or epoch == 0:
-                print(f"Epoch {epoch+1:3d}/{self.config.NUM_EPOCHS}: Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+                print(f"Epoch {epoch+1:3d}/{self.config.NUM_EPOCHS}: "
+                      f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, Train F1: {train_f1:.4f} | "
+                      f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val F1: {val_f1:.4f}")
             
             if val_acc >= best_val_acc:
                 best_val_acc = val_acc

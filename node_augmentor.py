@@ -33,6 +33,11 @@ except ImportError:
     print("Warning: openai package not installed. LLM augmentation disabled.")
 
 
+class QuotaExceededError(Exception):
+    """Raised when API quota is exceeded"""
+    pass
+
+
 class LanguageModelEncoder:
     """Encode text using pre-trained language models"""
     
@@ -58,12 +63,17 @@ class LanguageModelEncoder:
         
         print(f"Language Model loaded: {self.device}, dim={self.embedding_dim}")
     
-    def encode(self, texts: List[str], batch_size: int = 32) -> np.ndarray:
+    def encode(self, texts: List[str], batch_size: int = 32, verbose: bool = False) -> np.ndarray:
         """Encode texts to embeddings"""
         embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
         
         # Process in batches
-        for i in range(0, len(texts), batch_size):
+        batch_iter = range(0, len(texts), batch_size)
+        if verbose and total_batches > 1:
+            batch_iter = tqdm(batch_iter, desc="Encoding texts", total=total_batches, leave=False)
+        
+        for i in batch_iter:
             batch_texts = texts[i:i+batch_size]
             
             # Tokenize
@@ -222,11 +232,11 @@ class NodeAugmentor:
             
         except APIError as e:
             error_str = str(e)
-            if "403" in error_str or "quota" in error_str.lower():
+            if "403" in error_str or "quota" in error_str.lower() or "402" in error_str or "payment" in error_str.lower():
                 print(f"Quota exceeded: {e}")
                 self.stats['quota_exceeded'] += 1
                 self.use_llm = False
-                return None
+                raise QuotaExceededError(f"API quota exceeded: {e}")
             elif "429" in error_str or "rate limit" in error_str.lower():
                 self.stats['rate_limited'] += 1
                 if retry_count < Config.LLM_MAX_RETRIES:
@@ -244,6 +254,14 @@ class NodeAugmentor:
         except Exception as e:
             error_str = str(e).lower()
             error_type = type(e).__name__
+            
+            # Check for quota-related errors
+            if any(kw in error_str for kw in ['quota', '402', 'payment required', 'insufficient funds', 'payment']):
+                print(f"Quota exceeded: {e}")
+                self.stats['quota_exceeded'] += 1
+                self.use_llm = False
+                raise QuotaExceededError(f"API quota exceeded: {e}")
+            
             is_network_error = any(kw in error_str for kw in ['ssl', 'socket', 'connection', 'timeout', 'network', 'read', 'httpcore', 'httpx'])
             
             if HTTPCORE_AVAILABLE:
@@ -288,16 +306,21 @@ Paraphrased version (one line only):"""
         augmented = self._call_llm(prompt)
         return augmented if augmented else text
     
-    def augment_batch_texts(self, texts: List[str], batch_size: int = None) -> List[str]:
+    def augment_batch_texts(self, texts: List[str], batch_size: int = None, verbose: bool = False) -> List[str]:
         if batch_size is None:
             batch_size = self.batch_size
         if not self.use_llm or not texts:
             return texts
         
         augmented_results = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
         
         # Process texts in batches
-        for i in range(0, len(texts), batch_size):
+        batch_iter = range(0, len(texts), batch_size)
+        if verbose:
+            batch_iter = tqdm(batch_iter, desc="Processing text batches", total=total_batches, leave=False)
+        
+        for i in batch_iter:
             batch_texts = texts[i:i+batch_size]
             
             # Filter out empty/short texts
@@ -382,7 +405,8 @@ Paraphrased versions (one per line, no numbering):"""
         selected_node_indices: np.ndarray,
         node_texts: List[str] = None,
         use_batching: bool = True,
-        batch_size: int = None
+        batch_size: int = None,
+        verbose: bool = False
     ) -> Data:
         if batch_size is None:
             batch_size = self.batch_size
@@ -393,7 +417,7 @@ Paraphrased versions (one per line, no numbering):"""
         
         if use_batching and self.use_llm and len(selected_node_indices) > 0:
             selected_texts = [node_texts[i] for i in selected_node_indices]
-            augmented_selected = self.augment_batch_texts(selected_texts, batch_size=batch_size)
+            augmented_selected = self.augment_batch_texts(selected_texts, batch_size=batch_size, verbose=verbose)
             
             augmented_texts = []
             selected_idx = 0
@@ -413,7 +437,11 @@ Paraphrased versions (one per line, no numbering):"""
                 else:
                     augmented_texts.append(node_texts[i])
         
-        embeddings = self.lm_encoder.encode(augmented_texts)
+        # Encode texts to embeddings
+        # Only show encoding progress for large graphs
+        encode_verbose = verbose and len(augmented_texts) > 100
+        embeddings = self.lm_encoder.encode(augmented_texts, verbose=encode_verbose)
+        
         data_aug = data.clone()
         data_aug.x_aug = torch.FloatTensor(embeddings)
         data_aug.augmented_node_mask = torch.zeros(num_nodes, dtype=torch.bool)
@@ -435,21 +463,42 @@ Paraphrased versions (one per line, no numbering):"""
             batch_size = self.batch_size
         augmented_graphs = []
         
-        iterator = tqdm(zip(graph_list, selected_nodes_list), 
-                       total=len(graph_list),
-                       desc="Augmenting nodes (batched)",
-                       disable=not verbose)
+        total_nodes_to_augment = sum(len(nodes) for nodes in selected_nodes_list)
+        nodes_processed = 0
+        initial_stats = self.stats.copy()
+        
+        iterator = zip(graph_list, selected_nodes_list)
+        if verbose:
+            iterator = tqdm(iterator, 
+                          total=len(graph_list),
+                          desc="Augmenting graphs",
+                          disable=False)
         
         for i, (data, selected_indices) in enumerate(iterator):
+            num_selected = len(selected_indices)
             node_texts = texts_list[i] if texts_list else None
+            
             data_aug = self.augment_graph_nodes(
                 data, 
                 selected_indices, 
                 node_texts,
                 use_batching=True,
-                batch_size=batch_size
+                batch_size=batch_size,
+                verbose=verbose and num_selected > 0
             )
             augmented_graphs.append(data_aug)
+            
+            nodes_processed += num_selected
+            
+            # Update progress bar with stats
+            if verbose and hasattr(iterator, 'set_postfix'):
+                current_llm_calls = self.stats['llm_calls'] - initial_stats['llm_calls']
+                current_cache_hits = self.stats['cache_hits'] - initial_stats['cache_hits']
+                iterator.set_postfix({
+                    'nodes': f'{nodes_processed}/{total_nodes_to_augment}',
+                    'LLM': current_llm_calls,
+                    'cache': current_cache_hits
+                })
         
         return augmented_graphs
     
