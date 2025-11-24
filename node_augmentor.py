@@ -315,11 +315,16 @@ Paraphrased version (one line only):"""
         augmented_results = []
         total_batches = (len(texts) + batch_size - 1) // batch_size
         
+        # Log batching information (only for large batches to avoid clutter)
+        if verbose and len(texts) > batch_size:
+            print(f"    Batching {len(texts)} texts into {total_batches} batches (batch_size={batch_size})")
+        
         # Process texts in batches
         batch_iter = range(0, len(texts), batch_size)
         if verbose:
             batch_iter = tqdm(batch_iter, desc="Processing text batches", total=total_batches, leave=False)
         
+        initial_llm_calls = self.stats['llm_calls']
         for i in batch_iter:
             batch_texts = texts[i:i+batch_size]
             
@@ -334,6 +339,12 @@ Paraphrased version (one line only):"""
             
             # Create batched prompt
             batch_prompt = self._create_batch_prompt(valid_texts)
+            
+            # Verify batching: prompt should mention multiple texts if we have them
+            if len(valid_texts) > 1 and verbose:
+                # Quick check: prompt should contain the count
+                if f"{len(valid_texts)} social media posts" not in batch_prompt:
+                    print(f"    ⚠ Warning: Batch prompt may not be formatted correctly for {len(valid_texts)} texts")
             
             # Call LLM once for entire batch
             response = self._call_llm(batch_prompt)
@@ -361,9 +372,26 @@ Paraphrased version (one line only):"""
                 # API call failed, keep originals
                 augmented_results.extend(batch_texts)
         
+        # Verify batching worked: should have made fewer LLM calls than texts
+        final_llm_calls = self.stats['llm_calls']
+        llm_calls_made = final_llm_calls - initial_llm_calls
+        if verbose and llm_calls_made > 0:
+            texts_per_call = len(texts) / llm_calls_made if llm_calls_made > 0 else 0
+            if texts_per_call > 1:
+                print(f"    ✓ Batching verified: {llm_calls_made} LLM call(s) for {len(texts)} texts ({texts_per_call:.1f} texts/call)")
+        
         return augmented_results
     
     def _create_batch_prompt(self, texts: List[str]) -> str:
+        # Verify we have multiple texts for batching
+        if len(texts) == 1:
+            # Single text - use single text prompt instead
+            return f"""Paraphrase the following social media post while keeping the same meaning:
+
+Original: "{texts[0]}"
+
+Paraphrased version (one line only):"""
+        
         # Create numbered list of texts
         text_list = "\n".join([f"{i+1}. \"{text}\"" for i, text in enumerate(texts)])
         
@@ -461,6 +489,11 @@ Paraphrased versions (one per line, no numbering):"""
     ) -> List[Data]:
         if batch_size is None:
             batch_size = self.batch_size
+        
+        # Log the batch size being used
+        if verbose:
+            print(f"    Using LLM batch_size={batch_size} (from {'parameter' if batch_size != self.batch_size else 'Config.LLM_BATCH_SIZE'})")
+        
         augmented_graphs = []
         
         total_nodes_to_augment = sum(len(nodes) for nodes in selected_nodes_list)
@@ -499,6 +532,20 @@ Paraphrased versions (one per line, no numbering):"""
                     'LLM': current_llm_calls,
                     'cache': current_cache_hits
                 })
+        
+        # Print batching efficiency summary
+        final_stats = self.stats.copy()
+        total_llm_calls = final_stats['llm_calls'] - initial_stats['llm_calls']
+        total_cache_hits = final_stats['cache_hits'] - initial_stats['cache_hits']
+        if verbose and total_nodes_to_augment > 0 and total_llm_calls > 0:
+            avg_nodes_per_call = total_nodes_to_augment / total_llm_calls
+            expected_calls_without_batching = total_nodes_to_augment
+            batching_efficiency = (1 - total_llm_calls / expected_calls_without_batching) * 100 if expected_calls_without_batching > 0 else 0
+            print(f"\n    Batching Summary:")
+            print(f"      Total nodes: {total_nodes_to_augment:,}")
+            print(f"      LLM API calls: {total_llm_calls:,} (would be {expected_calls_without_batching:,} without batching)")
+            print(f"      Average nodes per call: {avg_nodes_per_call:.1f} (target: {batch_size})")
+            print(f"      Batching efficiency: {batching_efficiency:.1f}% reduction in API calls")
         
         return augmented_graphs
     

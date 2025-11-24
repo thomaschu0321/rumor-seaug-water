@@ -177,6 +177,7 @@ class SeAugPipeline:
             
             # Stage 3: Node Augmentation
             print(f"  [Stage 3] Augmenting selected nodes...")
+            print(f"    Configuration: LLM_BATCH_SIZE={self.batch_size}")
             initial_stats = self.node_augmentor.get_statistics()
             
             augmented_list = self.node_augmentor.augment_batch(
@@ -475,6 +476,40 @@ class SeAugPipeline:
         if dataset_name.lower() == 'pheme' and self.current_events:
             print(f"Events: {', '.join(self.current_events)}")
         
+        # Get augmentation statistics if available
+        augmentation_stats = {}
+        if self.enable_augmentation and self.node_augmentor:
+            aug_stats = self.node_augmentor.get_statistics()
+            augmentation_stats = {
+                'llm_calls': aug_stats.get('llm_calls', 0),
+                'cache_hits': aug_stats.get('cache_hits', 0),
+                'quota_exceeded': aug_stats.get('quota_exceeded', 0),
+                'rate_limited': aug_stats.get('rate_limited', 0),
+                'network_errors': aug_stats.get('network_errors', 0),
+                'retries': aug_stats.get('retries', 0)
+            }
+            # Calculate cache hit rate
+            total_requests = augmentation_stats['llm_calls'] + augmentation_stats['cache_hits']
+            if total_requests > 0:
+                augmentation_stats['cache_hit_rate'] = augmentation_stats['cache_hits'] / total_requests * 100
+            else:
+                augmentation_stats['cache_hit_rate'] = 0.0
+            
+            # Print augmentation statistics summary
+            if augmentation_stats['llm_calls'] > 0 or augmentation_stats['cache_hits'] > 0:
+                print(f"\nAugmentation Statistics:")
+                print(f"  LLM API calls: {augmentation_stats['llm_calls']:,}")
+                print(f"  Cache hits: {augmentation_stats['cache_hits']:,}")
+                print(f"  Cache hit rate: {augmentation_stats['cache_hit_rate']:.1f}%")
+                if augmentation_stats['retries'] > 0:
+                    print(f"  Retries: {augmentation_stats['retries']:,}")
+                if augmentation_stats['rate_limited'] > 0:
+                    print(f"  Rate limit events: {augmentation_stats['rate_limited']:,}")
+                if augmentation_stats['network_errors'] > 0:
+                    print(f"  Network errors: {augmentation_stats['network_errors']:,}")
+                if augmentation_stats['quota_exceeded'] > 0:
+                    print(f"  Quota exceeded: {augmentation_stats['quota_exceeded']:,}")
+        
         output_files = {}
         history_plot = self._save_training_curves(results.get('history'), run_tag)
         if history_plot:
@@ -505,6 +540,7 @@ class SeAugPipeline:
                     'augmented_nodes': self.stats['augmented_nodes'],
                     'augmentation_time': self.stats['augmentation_time']
                 },
+                'augmentation_statistics': augmentation_stats if augmentation_stats else None,
                 'test_results': results['test_results'],
                 'best_val_acc': results.get('best_val_acc', 0),
                 'history': {
@@ -526,7 +562,8 @@ class SeAugPipeline:
             file_exists = os.path.isfile(csv_path)
             fieldnames = ["dataset", "model_type", "enable_augmentation", "node_strategy", "fusion_strategy",
                          "augmentation_ratio", "gnn_backbone", "sample_ratio", "total_graphs", "total_nodes",
-                         "augmented_nodes", "augmentation_time", "accuracy", "precision", "recall", "f1",
+                         "augmented_nodes", "augmentation_time", "llm_calls", "cache_hits", "cache_hit_rate",
+                         "quota_exceeded", "rate_limited", "network_errors", "retries", "accuracy", "precision", "recall", "f1",
                          "pheme_events"]
             
             model_desc = "SeAug with LLM" if self.enable_augmentation else "Baseline (No Augmentation)"
@@ -537,7 +574,9 @@ class SeAugPipeline:
                 with open(csv_path, mode="r", newline="") as existing_file:
                     reader = csv.DictReader(existing_file)
                     header = reader.fieldnames or []
-                    if "pheme_events" not in header:
+                    # Check if new augmentation stats columns are missing
+                    new_columns = ["llm_calls", "cache_hits", "cache_hit_rate", "quota_exceeded", "rate_limited", "network_errors", "retries"]
+                    if any(col not in header for col in new_columns):
                         needs_header_upgrade = True
                         existing_rows = list(reader)
             if needs_header_upgrade:
@@ -545,7 +584,10 @@ class SeAugPipeline:
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                     for row in existing_rows:
-                        row["pheme_events"] = row.get("pheme_events", "")
+                        # Add missing columns with default values
+                        for col in fieldnames:
+                            if col not in row:
+                                row[col] = ""
                         writer.writerow(row)
                 file_exists = True  # Header upgraded; treat as existing file for append
             
@@ -553,7 +595,8 @@ class SeAugPipeline:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 if not file_exists:
                     writer.writeheader()
-                writer.writerow({
+                
+                row_data = {
                     "dataset": dataset_name,
                     "model_type": model_desc,
                     "enable_augmentation": self.enable_augmentation,
@@ -566,12 +609,20 @@ class SeAugPipeline:
                     "total_nodes": self.stats["total_nodes"],
                     "augmented_nodes": self.stats["augmented_nodes"],
                     "augmentation_time": round(self.stats["augmentation_time"], 2),
+                    "llm_calls": augmentation_stats.get("llm_calls", 0),
+                    "cache_hits": augmentation_stats.get("cache_hits", 0),
+                    "cache_hit_rate": round(augmentation_stats.get("cache_hit_rate", 0.0), 2),
+                    "quota_exceeded": augmentation_stats.get("quota_exceeded", 0),
+                    "rate_limited": augmentation_stats.get("rate_limited", 0),
+                    "network_errors": augmentation_stats.get("network_errors", 0),
+                    "retries": augmentation_stats.get("retries", 0),
                     "accuracy": results["test_results"]["accuracy"],
                     "precision": results["test_results"]["precision"],
                     "recall": results["test_results"]["recall"],
                     "f1": results["test_results"]["f1"],
                     "pheme_events": ", ".join(self.current_events) if dataset_name.lower() == "pheme" and self.current_events else "",
-                })
+                }
+                writer.writerow(row_data)
             output_files['csv'] = csv_path
         
         return output_files
