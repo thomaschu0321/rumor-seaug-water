@@ -1,15 +1,18 @@
-# Environment variables
+# Environment & secrets
 .env
+.env.*
+*.env
 
-# Python
+# Python cache & artifacts
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.whl
 .Python
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -24,39 +27,70 @@ wheels/
 *.egg
 
 # Virtual environments
+.venv/
 venv/
 env/
 ENV/
-.venv
+.conda/
+.mypy_cache/
+.ruff_cache/
 
-# IDE
+# Editors & tooling
 .vscode/
 .idea/
+*.code-workspace
 *.swp
 *.swo
 *~
-*.code-workspace
 
-# Binary files
-*.whl
-
-# OS
+# Operating system junk
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs & reports
+logs/
 *.log
+*.out
+*.err
+wandb/
+mlruns/
 
-# Data artifacts
-data/processed/
-data/PHEME/all-rnr-annotated-threads/
-results/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pytest
+# Test & coverage
 .pytest_cache/
 .coverage
 htmlcov/
+coverage.xml
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Model artifacts
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Data artifacts (generated or downloaded)
+data/processed/
+data/PHEME/
+data/Twitter15/
+data/Twitter16/
+data/Twitter/
+data/*/cache/
+*.pkl
+*.npz
+*.npy
+
+# Experiment outputs
+results/
+outputs/
+artifacts/
+Archive/
+
+# Misc temp files
+tmp/
+temp/
+*.bak
+*.tmp
+*.orig
 
