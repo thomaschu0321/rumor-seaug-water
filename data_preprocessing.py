@@ -61,6 +61,13 @@ def _extract_node_texts(tree, default_text):
     return texts
 
 
+def _build_processed_filename(dataname, sample_ratio):
+    """Return the canonical filename used when caching processed graphs."""
+    if sample_ratio == 1.0:
+        return f'{dataname}_processed_bert_full.pkl'
+    return f'{dataname}_processed_bert_sample{sample_ratio}.pkl'
+
+
 class TwitterDataProcessor:
     def __init__(self, dataname='Twitter15', feature_dim=768, sample_ratio=1.0):
         self.dataname = dataname
@@ -188,6 +195,31 @@ class TwitterDataProcessor:
         if skipped > 0:
             print(f"Skipped: {skipped} graphs")
         
+        return graph_list
+
+    def save_processed_data(self, graph_list, save_path=None):
+        if save_path is None:
+            save_path = Config.PROCESSED_DIR
+        os.makedirs(save_path, exist_ok=True)
+        
+        filename = _build_processed_filename(self.dataname, self.sample_ratio)
+        filepath = os.path.join(save_path, filename)
+        with open(filepath, 'wb') as f:
+            pickle.dump(graph_list, f)
+        print(f"Saved: {filepath}")
+        return filepath
+    
+    def load_processed_data(self, load_path=None):
+        if load_path is None:
+            filename = _build_processed_filename(self.dataname, self.sample_ratio)
+            load_path = os.path.join(Config.PROCESSED_DIR, filename)
+        
+        if not os.path.exists(load_path):
+            raise FileNotFoundError(f"Processed data not found: {load_path}")
+        
+        with open(load_path, 'rb') as f:
+            graph_list = pickle.load(f)
+        print(f"Loaded {len(graph_list)} graphs")
         return graph_list
 
 
@@ -423,10 +455,7 @@ class PhemeDataProcessor:
             save_path = Config.PROCESSED_DIR
         os.makedirs(save_path, exist_ok=True)
         
-        if self.sample_ratio == 1.0:
-            filename = f'{self.dataname}_processed_bert_full.pkl'
-        else:
-            filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
+        filename = _build_processed_filename(self.dataname, self.sample_ratio)
         filepath = os.path.join(save_path, filename)
         with open(filepath, 'wb') as f:
             pickle.dump(graph_list, f)
@@ -435,10 +464,7 @@ class PhemeDataProcessor:
     
     def load_processed_data(self, load_path=None):
         if load_path is None:
-            if self.sample_ratio == 1.0:
-                filename = f'{self.dataname}_processed_bert_full.pkl'
-            else:
-                filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
+            filename = _build_processed_filename(self.dataname, self.sample_ratio)
             load_path = os.path.join(Config.PROCESSED_DIR, filename)
         
         if not os.path.exists(load_path):
@@ -590,10 +616,7 @@ class WeiboDataProcessor:
         
         os.makedirs(save_path, exist_ok=True)
         
-        if self.sample_ratio == 1.0:
-            filename = f'{self.dataname}_processed_bert_full.pkl'
-        else:
-            filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
+        filename = _build_processed_filename(self.dataname, self.sample_ratio)
         
         filepath = os.path.join(save_path, filename)
         with open(filepath, 'wb') as f:
@@ -605,10 +628,7 @@ class WeiboDataProcessor:
     def load_processed_data(self, load_path=None):
         """Load processed data"""
         if load_path is None:
-            if self.sample_ratio == 1.0:
-                filename = f'{self.dataname}_processed_bert_full.pkl'
-            else:
-                filename = f'{self.dataname}_processed_bert_sample{self.sample_ratio}.pkl'
+            filename = _build_processed_filename(self.dataname, self.sample_ratio)
             load_path = os.path.join(Config.PROCESSED_DIR, filename)
         
         if not os.path.exists(load_path):
