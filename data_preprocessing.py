@@ -232,8 +232,14 @@ class PhemeDataProcessor:
     
     @staticmethod
     def _read_json(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except UnicodeDecodeError as exc:
+            # Some raw PHEME dumps ship with cp1252/latin-1 bytes; fall back so we do not drop threads.
+            print(f"Warning: UTF-8 decode failed for {path}: {exc}; retrying with latin-1.")
+            with open(path, 'r', encoding='latin-1') as f:
+                return json.load(f)
     
     @staticmethod
     def _clean_text(text):
