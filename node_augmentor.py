@@ -4,13 +4,14 @@ import time
 import numpy as np
 import torch
 from torch_geometric.data import Data
-from typing import List, Dict
+from typing import List, Dict, Optional
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
 from config import Config
 from transformers import AutoTokenizer, AutoModel
+import prompt_templates
 
 try:
     from openai import AzureOpenAI, OpenAI
@@ -203,7 +204,7 @@ class NodeAugmentor:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant for text paraphrasing."},
+                    {"role": "system", "content": prompt_templates.SYSTEM_PROMPT_AUGMENTOR},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=self.max_tokens,
@@ -293,20 +294,39 @@ class NodeAugmentor:
                 print(f"LLM call failed: {error_type}: {e}")
                 return None
     
-    def augment_node_text(self, text: str) -> str:
+    def augment_node_text(self, text: str, label: Optional[str] = None) -> str:
+        """
+        Augment a single node's text
+        
+        Args:
+            text: Original text
+            label: Optional label ("rumor" or "non-rumor")
+        
+        Returns:
+            Augmented text
+        """
         if not self.use_llm or not text or len(text) < 5:
             return text
         
-        prompt = f"""Paraphrase the following social media post while keeping the same meaning:
-
-Original: "{text}"
-
-Paraphrased version (one line only):"""
+        # Use label-aware prompt from prompt_templates
+        prompt = prompt_templates.get_simple_paraphrase_prompt(text, label)
         
         augmented = self._call_llm(prompt)
         return augmented if augmented else text
     
-    def augment_batch_texts(self, texts: List[str], batch_size: int = None, verbose: bool = False) -> List[str]:
+    def augment_batch_texts(self, texts: List[str], labels: Optional[List[str]] = None, batch_size: int = None, verbose: bool = False) -> List[str]:
+        """
+        Augment a batch of texts
+        
+        Args:
+            texts: List of original texts
+            labels: Optional list of labels ("rumor" or "non-rumor")
+            batch_size: Batch size for LLM calls
+            verbose: Whether to print progress
+        
+        Returns:
+            List of augmented texts
+        """
         if batch_size is None:
             batch_size = self.batch_size
         if not self.use_llm or not texts:
@@ -327,18 +347,20 @@ Paraphrased version (one line only):"""
         initial_llm_calls = self.stats['llm_calls']
         for i in batch_iter:
             batch_texts = texts[i:i+batch_size]
+            batch_labels = labels[i:i+batch_size] if labels else None
             
             # Filter out empty/short texts
             valid_indices = [j for j, t in enumerate(batch_texts) if t and len(t) >= 5]
             valid_texts = [batch_texts[j] for j in valid_indices]
+            valid_labels = [batch_labels[j] for j in valid_indices] if batch_labels else None
             
             if not valid_texts:
                 # All texts invalid, keep originals
                 augmented_results.extend(batch_texts)
                 continue
             
-            # Create batched prompt
-            batch_prompt = self._create_batch_prompt(valid_texts)
+            # Create batched prompt (label-aware if labels provided)
+            batch_prompt = self._create_batch_prompt(valid_texts, valid_labels)
             
             # Verify batching: prompt should mention multiple texts if we have them
             if len(valid_texts) > 1 and verbose:
@@ -382,28 +404,19 @@ Paraphrased version (one line only):"""
         
         return augmented_results
     
-    def _create_batch_prompt(self, texts: List[str]) -> str:
-        # Verify we have multiple texts for batching
-        if len(texts) == 1:
-            # Single text - use single text prompt instead
-            return f"""Paraphrase the following social media post while keeping the same meaning:
-
-Original: "{texts[0]}"
-
-Paraphrased version (one line only):"""
+    def _create_batch_prompt(self, texts: List[str], labels: Optional[List[str]] = None) -> str:
+        """
+        Create a batch prompt for multiple texts
         
-        # Create numbered list of texts
-        text_list = "\n".join([f"{i+1}. \"{text}\"" for i, text in enumerate(texts)])
+        Args:
+            texts: List of texts
+            labels: Optional list of labels ("rumor" or "non-rumor")
         
-        prompt = f"""Paraphrase the following {len(texts)} social media posts while keeping the same meaning for each.
-Provide one paraphrased version per line, in the same order.
-
-Original posts:
-{text_list}
-
-Paraphrased versions (one per line, no numbering):"""
-        
-        return prompt
+        Returns:
+            Formatted prompt string
+        """
+        # Use the new prompt template from prompt_templates module
+        return prompt_templates.get_batch_paraphrase_prompt(texts, labels)
     
     def _parse_batch_response(self, response: str, expected_count: int) -> List[str]:
         import re
@@ -443,9 +456,17 @@ Paraphrased versions (one per line, no numbering):"""
         if node_texts is None:
             node_texts = [f"Node {i} placeholder text" for i in range(num_nodes)]
         
+        # Extract label from data (0=non-rumor, 1=rumor)
+        graph_label = None
+        if hasattr(data, 'y') and data.y is not None:
+            label_value = data.y.item() if torch.is_tensor(data.y) else data.y
+            graph_label = "rumor" if label_value == 1 else "non-rumor"
+        
         if use_batching and self.use_llm and len(selected_node_indices) > 0:
             selected_texts = [node_texts[i] for i in selected_node_indices]
-            augmented_selected = self.augment_batch_texts(selected_texts, batch_size=batch_size, verbose=verbose)
+            # Create label list for all selected texts (all nodes in same graph have same label)
+            selected_labels = [graph_label] * len(selected_texts) if graph_label else None
+            augmented_selected = self.augment_batch_texts(selected_texts, labels=selected_labels, batch_size=batch_size, verbose=verbose)
             
             augmented_texts = []
             selected_idx = 0
@@ -460,7 +481,7 @@ Paraphrased versions (one per line, no numbering):"""
             augmented_texts = []
             for i in range(num_nodes):
                 if i in selected_node_indices:
-                    augmented_texts.append(self.augment_node_text(node_texts[i]))
+                    augmented_texts.append(self.augment_node_text(node_texts[i], label=graph_label))
                     self.stats['nodes_augmented'] += 1
                 else:
                     augmented_texts.append(node_texts[i])
@@ -506,7 +527,7 @@ Paraphrased versions (one per line, no numbering):"""
         if verbose:
             print(f"    Collecting {total_nodes_to_augment:,} nodes from {len(graph_list)} graphs...")
         
-        node_items = []  # List of (graph_idx, node_idx, text) tuples
+        node_items = []  # List of (graph_idx, node_idx, text, label) tuples
         graph_node_texts = {}  # Store all node texts per graph for later use
         
         for graph_idx, (data, selected_indices) in enumerate(zip(graph_list, selected_nodes_list)):
@@ -521,18 +542,26 @@ Paraphrased versions (one per line, no numbering):"""
             
             graph_node_texts[graph_idx] = node_texts.copy()
             
-            # Collect selected nodes
+            # Extract label from data (0=non-rumor, 1=rumor)
+            graph_label = None
+            if hasattr(data, 'y') and data.y is not None:
+                label_value = data.y.item() if torch.is_tensor(data.y) else data.y
+                graph_label = "rumor" if label_value == 1 else "non-rumor"
+            
+            # Collect selected nodes with their labels
             for node_idx in selected_indices:
                 text = node_texts[node_idx]
-                node_items.append((graph_idx, node_idx, text))
+                node_items.append((graph_idx, node_idx, text, graph_label))
         
-        # Stage 2: Batch all texts together across graphs
+        # Stage 2: Batch all texts together across graphs (label-aware)
         if verbose:
             print(f"    Batching {len(node_items):,} nodes across graphs (batch_size={batch_size})...")
         
         all_texts = [item[2] for item in node_items]
+        all_labels = [item[3] for item in node_items]
         augmented_texts = self.augment_batch_texts(
             all_texts, 
+            labels=all_labels,
             batch_size=batch_size, 
             verbose=verbose
         )
@@ -543,7 +572,7 @@ Paraphrased versions (one per line, no numbering):"""
         
         # Create mapping: (graph_idx, node_idx) -> augmented_text
         augmentation_map = {}
-        for (graph_idx, node_idx, _), aug_text in zip(node_items, augmented_texts):
+        for (graph_idx, node_idx, _, _), aug_text in zip(node_items, augmented_texts):
             augmentation_map[(graph_idx, node_idx)] = aug_text
         
         # Stage 4: Create augmented graphs
